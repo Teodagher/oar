@@ -1,0 +1,516 @@
+# Open agent template format — v0.2 (draft)
+
+*Working title. No name has been chosen for the format yet; the decisions say "its name can
+wait". The extension block is called `x-agent8` because agent8 is the first host; nothing else
+in the format depends on agent8.*
+
+Status: **draft v0.2**, 2026-11-06. Replaces the copy-and-merge draft v0.1 ("Forkable",
+`raw/portable-agents/2026-11-06-agent-protocol-spec-v0.1-draft.md`). Not yet reviewed against
+real agents (ticket T-146). The key words MUST, SHOULD and MAY are used as in RFC 2119.
+
+## 0. In one paragraph
+
+A **template** is an ordinary folder (often a git repo) holding everything needed to *become* an
+AI agent — instructions, skills, MCP servers, settings, setup questions, the names of the
+secrets it needs — and **none of the data** of a running agent. A **copy** (an installed agent)
+keeps the template as a **read-only** copy of one exact version and writes everything of its
+own — identity, local rules, its own skills and settings — to **its own layer** next to it.
+Updating a copy means **switching to another template version**; nothing is ever merged. The
+format invents almost nothing: the manifest is an [OpenGAP / GitAgent](https://github.com/open-gitagent/opengap)
+`agent.yaml`, instructions are [AGENTS.md](https://agents.md), skills are
+[Agent Skills](https://agentskills.io), MCP servers use the shared `mcpServers` JSON shape, and
+a template can be exported as a [Claude Code plugin](https://code.claude.com/docs/en/plugins-reference).
+It adds one namespaced block, `x-agent8`, for what those formats leave out: the **data list**,
+**setup questions**, **secrets by vault item name**, **requirements** and a **format version**.
+
+Host policy — who may install what, how an agent is launched, what is trusted, how secrets are
+stored — is **not** part of the format. Each host documents it in a *profile*; agent8's is
+[`PROFILE-agent8.md`](PROFILE-agent8.md).
+
+---
+
+## 1. What is reused, exactly
+
+| Existing format | What this spec takes | What it does not take |
+|---|---|---|
+| **OpenGAP `agent.yaml`** (spec v0.1.0, schema `agent-yaml.schema.json`) | The file name and its required fields `name` (`^[a-z][a-z0-9-]*$`), `version` (semver), `description`; the recommended `spec_version`; optional `author`, `license`, `tags`, `metadata`. **`extends`**, whose meaning ("this agent builds on that one; child skills shadow parent skills on a name clash; memory is not inherited") is exactly the copy/template relation. | `SOUL.md` as a requirement, a committed `memory/`, `compliance`, `model`, `runtime`. They stay allowed (OpenGAP keys are passed through untouched) but mean nothing here. |
+| **AGENTS.md** | The template's main instructions, as-is. | — |
+| **Agent Skills** (`SKILL.md` folders, frontmatter `name` + `description`) | Skills, as-is. Placement in each tool's folder: `.agents/skills/` (the shared location; Codex reads it) and `.claude/skills/` (Claude Code). | — |
+| **`mcpServers` JSON** (Claude Code `.mcp.json`, Cursor, plugin `.mcp.json`) | MCP declarations, with `${NAME}` environment placeholders. | Shipping the file as the live config (§6). |
+| **Claude Code settings** (`.claude/settings.json`: hooks, permissions) | As a *declaration* inside the template. | Shipping it as the live file (§6). |
+| **Claude Code plugins** (`.claude-plugin/plugin.json`) | Export target (§11). The plugin model (read-only installed copy, updated as a whole, `userConfig` for values) is the same idea as template + own layer. | Using a plugin as the whole agent: a plugin has no identity, data boundary, setup questions or own layer. |
+
+The OpenGAP RFC that proposes the missing pieces upstream is in [`rfcs/`](rfcs/).
+
+---
+
+## 2. The template
+
+### 2.1 Layout
+
+```
+my-agent/
+├── agent.yaml            REQUIRED  OpenGAP manifest + `x-agent8` block (§3)
+├── AGENTS.md             REQUIRED  main instructions (§4)
+├── CLAUDE.md             MAY       if present, `@AGENTS.md` (+ `@identity.md`, `@LOCAL.md`)
+├── skills/               MAY       Agent Skills, one folder per skill (§5). Location set by
+│   └── <name>/SKILL.md             `x-agent8.layout.skills`: `skills` (default),
+│                                   `.agents/skills` or `.claude/skills`
+├── .mcp.json             MAY       MCP servers the template declares (§6)
+├── .claude/settings.json MAY       Claude Code settings the template declares (§6)
+├── .codex/config.toml    MAY       Codex settings the template declares (§6)
+├── seed/                 MAY       starting content for data paths, copied once (§7.2)
+├── tools/ scripts/ …     MAY       code the agent or its hooks run
+├── README.md             SHOULD    shown on an import page
+└── LICENSE               SHOULD    without one nobody may legally reuse the template
+```
+
+### 2.2 Rules
+
+1. **No data.** No file outside `seed/` may match the data list (§7).
+2. **No secrets.** No secret values anywhere: no `.env`, no keys, no tokens. Secrets are named
+   (§8), never shipped.
+3. **No own-layer names at the root.** A template MUST NOT contain `identity.md`, `LOCAL.md`,
+   `mcp.local.json` or `.agent8/` at its root: those belong to copies (§9). It seeds
+   `identity.md` and `LOCAL.md` from `seed/` instead.
+4. **Self-contained.** No symlink may point outside the template; no absolute paths in
+   declarations; no git submodules in v0.2.
+5. **No `extends` in a template** in v0.2. A template that builds on another is flattened when
+   it is published (the host records the parent in its own metadata). `extends` is how a *copy*
+   points at its template (§9.2).
+6. **Works on its own.** A template SHOULD still run when cloned and opened directly (GitHub
+   "Use this template", then `claude` or `codex` in the folder). That is why `.claude/skills`,
+   `.mcp.json` and `.claude/settings.json` are allowed in it.
+
+---
+
+## 3. The manifest: `agent.yaml`
+
+YAML. The top level is an OpenGAP manifest. Everything this spec adds sits in **one** key,
+`x-agent8`.
+
+```yaml
+spec_version: "0.1.0"              # OpenGAP version this file also follows (recommended)
+name: teo-memory-agent             # OpenGAP: ^[a-z][a-z0-9-]*$
+version: 0.2.0                     # OpenGAP: semver. Releases are git tags v0.2.0
+description: A Claude Code agent with durable memory.
+author: Teo Dagher
+license: MIT
+
+x-agent8:
+  format: "0.2"                    # REQUIRED. This spec's version (§3.2)
+  layout:
+    skills: .claude/skills         # where the skills are in this template (default: skills)
+  data:                            # REQUIRED. What never travels (§7)
+    - /memory/
+    - /logs/
+  setup:                           # asked once at install (§3.3)
+    - id: owner_name
+      prompt: Your name (the agent's owner)
+      type: string
+      required: true
+  secrets:                         # vault item names (§8)
+    - item: Google
+      description: Google account the agent reads mail from
+      fields: [refresh_token]
+      env:
+        GOOGLE_REFRESH_TOKEN: "{{vault:Google.refresh_token}}"
+  requires:                        # what must exist before it can run (§3.4)
+    harnesses:
+      - name: claude-code
+      - name: codex
+        support: partial
+        note: hooks don't run, so memory rules are advice only
+    tools: ["git", "python3>=3.9"]
+    logins: [claude]
+```
+
+### 3.1 The `x-agent8` key
+
+- OpenGAP's published schema sets `additionalProperties: false`, so today `opengap validate`
+  rejects any extra top-level key. The RFC in [`rfcs/`](rfcs/) asks OpenGAP to accept keys
+  matching `^x-` (the OpenAPI convention). Tools that read `agent.yaml` without strict
+  validation already ignore it.
+- `metadata` cannot carry the block: OpenGAP restricts its values to strings, numbers and
+  booleans.
+
+### 3.2 `format` — the format version
+
+`format` is `"<major>.<minor>"` and names the version of *this* spec (`"0.2"` here). It is
+independent of the template's own `version` and of OpenGAP's `spec_version`.
+
+A host that implements format `M.N`:
+- MUST read any manifest whose major is `M` and minor is `≤ N`;
+- MUST refuse a manifest with a higher minor or another major, **before** writing anything,
+  with a plain message that names both versions, e.g. *"This template needs format 0.3; this
+  helper understands up to 0.2. Update the helper and try again."*;
+- while `M` is `0`, every minor is a breaking change; from `1.0`, a new minor only adds
+  optional fields that older hosts may ignore.
+
+The instance record (§9.3) carries the same field, with the same rule.
+
+### 3.3 `setup` — setup questions
+
+Asked once, at install. Answers are **never secret** (a secret is a vault item, §8) and stay in
+the copy's instance record (§9.3). They never go back to the template.
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | string, `^[a-z][a-z0-9_]*$` | unique |
+| `prompt` | string | the question, in plain words |
+| `type` | `string` · `text` · `choice` · `multi` · `boolean` · `number` | |
+| `choices` | list of strings | required for `choice` and `multi` |
+| `required` | boolean | default `false` |
+| `default` | matches `type` | |
+| `help` | string | optional explanation |
+
+Templates are copied byte for byte (no templating). Answers reach the agent two ways: the agent
+reads them in `.agent8/instance.yaml`, and **seed files** (§7.2) may contain
+`{{answer:<id>}}`, replaced once when the seed is copied. Seeds are data, so this never
+conflicts with an update.
+
+### 3.4 `requires`
+
+Facts, not policy. All lists are optional.
+
+| Field | Meaning |
+|---|---|
+| `harnesses` | Agent programs it works with: `{name, support?: full\|partial, note?}`. Known names: `claude-code`, `codex`, `cursor`, `gemini-cli`. The first one is the author's main target. |
+| `tools` | Commands that must be on the server, optionally with a minimum version: `"python3>=3.9"`. |
+| `logins` | Accounts the person must be signed in to (`claude`, `github`, …). |
+| `plugins` | Claude Code plugins it needs, as `name@marketplace`. |
+| `skills` | Agent Skills installed outside the template, as `owner/repo` or a URL. |
+
+---
+
+## 4. Instructions: AGENTS.md
+
+- The template's `AGENTS.md` is its main instructions, in the AGENTS.md format.
+- It MUST NOT tell the agent to edit itself. It SHOULD say, in its own words: *"Your identity
+  is in `identity.md`. Your own rules and improvements go in `LOCAL.md` and your own skills in
+  `skills/`. Never edit the template files; they are replaced on every update."*
+- If the template ships `CLAUDE.md`, its first line is `@AGENTS.md`, optionally followed by
+  `@identity.md` and `@LOCAL.md` (Claude Code skips an import whose file is missing), and
+  nothing else. Anything Claude-only goes in skills or `.claude/` files, not in `CLAUDE.md`.
+- In a copy, the root `AGENTS.md` and `CLAUDE.md` are generated by the host (§6).
+
+## 5. Skills: Agent Skills
+
+- Each skill is a folder with a `SKILL.md` whose frontmatter `name` equals the folder name and
+  has a `description`.
+- The template keeps them in the folder named by `x-agent8.layout.skills`.
+- In a copy, the host places the union of the template's skills and the copy's own skills in
+  **both** `.claude/skills/` and `.agents/skills/` (by copy or relative symlink). **A copy's
+  own skill wins** over a template skill with the same name (OpenGAP's `extends` rule).
+
+## 6. Host-owned files
+
+These files in a copy's folder are **written by the host**, at install, at every update and
+whenever the own layer changes. They are never shipped to be merged, never edited by hand
+(edits are lost) and never contributed back:
+
+| File | Built from |
+|---|---|
+| `AGENTS.md` | the template's `AGENTS.md`, then a short footer pointing at `identity.md` and `LOCAL.md` |
+| `CLAUDE.md` | `@AGENTS.md`, `@identity.md`, `@LOCAL.md` (one import per line) |
+| `.claude/skills/`, `.agents/skills/` | template skills ∪ own skills, own wins |
+| `.mcp.json` | template `.mcp.json` ∪ own `mcp.local.json` ∪ host entries |
+| `.claude/settings.json` | template `.claude/settings.json` ∪ host entries (the copy's own settings stay in `.claude/settings.local.json`, see below) |
+| `.codex/config.toml` | template `.codex/config.toml` ∪ own `mcp.local.json` servers ∪ host entries |
+
+**Composition, not merging.** Every composed file is rebuilt from its sources, in order
+*template → own layer → host*:
+- maps keyed by name (`mcpServers`, Codex `mcp_servers`): union; a later source replaces an
+  entry with the same name;
+- lists (`permissions.allow`, `permissions.deny`): union, de-duplicated;
+- hooks: concatenated per event, template first;
+- any other key: the later source wins.
+
+Claude Code already merges `.claude/settings.local.json` over `.claude/settings.json` by itself,
+so the copy's own Claude settings live in `.claude/settings.local.json`, which the host never
+touches. The host composes `.claude/settings.json` from the template and its own entries only.
+
+What the host adds is its own business (the agent8 entries are in the profile). The format only
+requires that a host entry never silently drops a template or own-layer entry with a different
+name.
+
+---
+
+## 7. Data
+
+### 7.1 The data list
+
+`x-agent8.data` lists everything that belongs to a running agent and **never** to the
+template: memory, wiki content, client files, conversations, logs, generated output. It is a
+YAML list; each item is **one gitignore pattern** with these restrictions, so it can be written
+verbatim into a `.gitignore` and read the same way by every tool:
+
+- **Anchored.** Each pattern starts with `/` (relative to the agent's folder) or with `**/`
+  (any depth, on purpose). `memory/` alone is refused: in gitignore it matches at any depth.
+- **One pattern, nothing else.** No comments, no trailing spaces, no blank items. Comments go
+  in YAML (`# …` on its own line).
+- `*`, `**`, `?`, `[…]` and a trailing `/` (directories only) mean what they mean in gitignore.
+- `!` negation is allowed, with gitignore's rule that a file inside an excluded directory can't
+  be re-included: write `/notes/**` then `!/notes/README.md`, not `/notes/` then the negation.
+
+What it means:
+- **Template:** no file outside `seed/` may match (§2.2).
+- **Install and update:** data paths are created from `seed/` once and never changed or deleted
+  by an update or a rollback.
+- **Leaving the copy** (export, contribute, publish a new template from it): data paths never
+  leave, whatever the copy's own git repo tracks.
+- **Implicitly data**, even if not listed: the own layer (§9.1), `.agent8/`, host-owned files
+  (§6) and secret file targets (§8.3).
+- A copy MAY add patterns to the data list in its own `agent.yaml` (§9.2). It can never remove
+  the template's patterns: the lists are unioned.
+- When in doubt, it's data. Folder names count as content (`clients/acme/` is data even empty).
+
+### 7.2 `seed/`
+
+`seed/` mirrors the agent's folder: `seed/memory/now.md` becomes `memory/now.md`. A seed file is
+copied **once**, at install, only if the target is missing; from then on it belongs to the copy.
+Every seed path MUST match the data list or be an own-layer file (`identity.md`, `LOCAL.md`).
+Seeds MUST NOT contain real data. `{{answer:<id>}}` in a seed is replaced with that setup answer
+when it is copied.
+
+---
+
+## 8. Secrets
+
+### 8.1 Declared by vault item name
+
+A template names the secrets it needs; it never holds one. A name is a **vault item** in the
+host's vault: an item is a name plus what it stores (one value, named fields, or a JSON
+document).
+
+| Field | Notes |
+|---|---|
+| `item` | the vault item name, `^[A-Za-z][A-Za-z0-9_-]{0,63}$` (no dot, so `Item.field` reads one way), unique in the list |
+| `description` | why the agent needs it, shown on an import page |
+| `fields` | optional list of the fields it uses (`[secret_key]`) |
+| `required` | default `true` |
+| `how_to_get` | optional URL or sentence |
+| `env` | optional map `ENV_NAME: "<placeholder>"`, given to the agent at launch |
+| `files` | optional list of files written into the agent's folder from a template file (§8.3) |
+
+Declaring an item says "this agent may need it". It is also what a host can use to narrow
+what an agent may read (agent8 does so for another author's template, see the profile).
+
+### 8.2 Placeholders
+
+One syntax, used in `env` values and in secret file templates:
+
+```
+{{vault:Item}}          the whole item (a JSON object; a single value as a string)
+{{vault:Item.field}}    one field
+```
+
+`Item` MUST be declared in `secrets`; `field`, if the item lists `fields`, MUST be one of them.
+
+`.mcp.json` keeps the standard `${NAME}` form, which Claude Code and others expand from the
+environment. Every `${NAME}` in the template's `.mcp.json` MUST be an `env` name declared by a
+secret (or one of `CLAUDE_PROJECT_DIR`, `CLAUDE_PLUGIN_ROOT`, `HOME`). Placeholders MUST NOT
+appear in `command` or `args`, which show up in the process list; use `env` or `headers`.
+
+### 8.3 File targets
+
+Some tools read a token file. A secret may declare:
+
+```yaml
+files:
+  - path: .secrets/google-token.json        # where the file is written
+    template: secret-templates/google-token.json   # template file with {{vault:…}} in it
+```
+
+- `path` MUST be relative, inside the agent's folder, with no `..`, no `~`, no leading `/`,
+  and not under `.agent8/` or on a host-owned file. **A secret target can never write outside
+  the agent's folder.** A tool that wants `~/.config/x/token.json` must be pointed at the
+  folder (an option or an environment variable) instead.
+- `template` MUST be a file in the template.
+- The host writes the file readable only by the agent, and treats `path` as data (never
+  exported, never in a template).
+
+---
+
+## 9. The copy
+
+### 9.1 The own layer
+
+| File | Holds | Written by |
+|---|---|---|
+| `identity.md` | who this copy is: name, owner, mission, the owner's hard rules | seeded, then onboarding / the agent |
+| `LOCAL.md` | the copy's own instructions and improvements | the agent and its owner |
+| `skills/<name>/SKILL.md` | the copy's own skills (win over template skills) | the agent |
+| `mcp.local.json` | the copy's own MCP servers | the agent or the host's app |
+| `.claude/settings.local.json` | the copy's own Claude Code settings | Claude Code, the agent |
+| `agent.yaml` | the copy's own manifest (§9.2) | the host at install; the owner may rename |
+
+If the template's skills folder is `skills/`, the template copy's skills live under
+`.agent8/template/<version>/skills/` and do not collide with the copy's own `skills/`.
+
+### 9.2 The copy's `agent.yaml`
+
+A copy is literally an OpenGAP agent that extends its template at an exact version:
+
+```yaml
+name: sams-memory-agent
+version: 0.0.1
+description: Sam's memory agent
+extends: https://github.com/Teodagher/teo-agent-boilerplate@0.2.0
+x-agent8:
+  format: "0.2"
+  data:
+    - /exports/          # the copy may add data patterns; it can't remove the template's
+```
+
+`extends` is `<source>@<version>`:
+- `<version>` is an **exact** semver (no ranges): the copy points at one immutable version.
+- `<source>` is a git URL (`https://…`, `git@host:owner/repo`), `github:owner/repo`, or a
+  host scheme (agent8 uses `agent8:<workspace>/<template>`, see the profile).
+- The string is split on its **last** `@`.
+
+The copy's `x-agent8` block may add `data` patterns, `secrets` and `requires`; it never changes
+`setup` (answers are in the instance record).
+
+### 9.3 The instance record: `.agent8/instance.yaml`
+
+Written by the host at install, updated at every update and rollback. Never contains a secret
+value.
+
+```yaml
+format: "0.2"
+template:
+  source: https://github.com/Teodagher/teo-agent-boilerplate
+  version: 0.2.0
+  digest: sha256:9f2c…               # of the installed template files
+  commit: 0eb0f71c…                  # optional: the git commit it came from
+  id: 3b1d…                          # optional: the host's id for this version
+previous:                            # optional: what a rollback returns to
+  version: 0.1.0
+  digest: sha256:41aa…
+installed_at: 2026-11-06T15:00:00Z
+updated_at: 2026-11-06T15:00:00Z
+answers:
+  owner_name: Sam
+secrets:                             # status only, never values
+  - item: Google
+    status: present                  # present | missing
+```
+
+`template.source` and `template.version` MUST equal the copy's `extends`. `digest` is the
+sha256 of the sorted lines `<path>\0<sha256 of the file>\n` for every file of the template
+version (a symlink hashes as `link:<target>`), so anyone can recompute it and a host can tell
+when the read-only copy was edited by hand.
+
+### 9.4 Folder of a copy
+
+```
+sams-memory-agent/
+├── .agent8/
+│   ├── instance.yaml                 instance record
+│   └── template/0.2.0/               the template, read-only, byte for byte
+├── agent.yaml                        own layer: extends …@0.2.0
+├── identity.md  LOCAL.md  skills/  mcp.local.json  .claude/settings.local.json   own layer
+├── memory/ …                         data, seeded once
+├── AGENTS.md  CLAUDE.md  .claude/skills/  .agents/skills/
+└── .mcp.json  .claude/settings.json  .codex/config.toml                  host-owned
+```
+
+**Every other template file is mirrored** at its own relative path in the copy's folder, as a
+read-only file or a relative symlink into `.agent8/template/<version>/`: `tools/memory.py`,
+`templates/…`, `.claude/rules/…`. So hooks written as `$CLAUDE_PROJECT_DIR/tools/memory.py`
+keep working, exactly as when the template is opened directly. Not mirrored: the files the
+host composes (§6), the template's skills folder (its skills are placed per §5), the template's `agent.yaml` (the copy has its own) and `seed/`. Mirrored
+paths are host-owned: the agent changes behaviour through its own layer, not by editing them.
+A mirrored path that collides with a data or own-layer path is an error in the template.
+
+---
+
+## 10. Update and rollback
+
+1. The host fetches the new version and installs it **beside** the old one, under
+   `.agent8/template/<new>/`.
+2. It shows what changed in plain words (files, instructions, skills, MCP servers, hooks,
+   setup questions, secrets) and asks any **new** setup question.
+3. It regenerates the host-owned files, rewrites `extends` and the instance record (the old
+   version goes to `previous`) and restarts the agent when it is idle.
+4. **Rollback** is the same switch in reverse. Data and the own layer are never touched by
+   either.
+
+There is no three-way merge. An edit made by hand inside `.agent8/template/` is lost at the
+next switch; a host SHOULD warn about it.
+
+## 11. Claude Code plugin export
+
+A template can be packaged as a Claude Code plugin, for people who want its capabilities in
+an agent they already have:
+
+| Template | Plugin |
+|---|---|
+| `name`, `version`, `description`, `author`, `license` | `.claude-plugin/plugin.json` same fields (`author` → `{name}`) |
+| skills | `skills/` |
+| `.claude/agents/*.md` | `agents/` |
+| `.claude/settings.json` hooks | `hooks/hooks.json`, `$CLAUDE_PROJECT_DIR/<template path>` rewritten to `${CLAUDE_PLUGIN_ROOT}/<template path>` |
+| `.mcp.json` | `.mcp.json`; each `${NAME}` from a secret becomes `${user_config.<name>}` |
+| secrets | `userConfig` entries with `sensitive: true` |
+| non-secret setup questions | `userConfig` entries (`string`, `number`, `boolean`; `choice` → `options`) |
+| `AGENTS.md` | a skill named after the agent (plugins don't load a `CLAUDE.md`) |
+| code under `tools/` etc. | copied as-is |
+| data list, seeds, own layer | **not exported**: a plugin has no data and no identity |
+
+The plugin is read-only and updated as a whole, like a template version.
+
+## 12. Reading OpenGAP repos without the block
+
+A host SHOULD import an OpenGAP repo that has no `x-agent8` block, as an unverified template:
+
+- **Instructions:** `SOUL.md`, then `RULES.md`, then `AGENTS.md`, concatenated in that order
+  into the template's instructions.
+- **Data:** `/memory/`, `/knowledge/` and `/.gitagent/` (the ticket's rule: memory and
+  knowledge are the original agent's, not the template's), plus the format's implicit data.
+  They are stripped before the version is stored.
+- **Skills:** `skills/`. **Tools and hooks:** `tools/`, `hooks/` are kept as code.
+- **`extends`:** the parent is fetched and flattened (OpenGAP's resolution rules), and the
+  result is stored as one version.
+- `setup` and `secrets` are empty; the author can add the block later.
+- `compliance`, `model`, `runtime` and `agents` are kept in the file and ignored.
+
+## 13. Conformance
+
+A **template** conforms when: `agent.yaml` validates against
+[`schema/manifest.schema.json`](schema/manifest.schema.json); `AGENTS.md` exists; every rule of
+§2.2, §7 and §8 holds; every skill folder has a valid `SKILL.md`. A **copy** conforms when its
+`agent.yaml` has a valid `extends`, `.agent8/instance.yaml` validates against
+[`schema/instance.schema.json`](schema/instance.schema.json) and matches `extends`, the template
+version is present under `.agent8/template/<version>/`, and every required setup question has
+an answer. [`tools/validate.py`](tools/validate.py) checks both.
+
+## 14. Changes from v0.1
+
+- Copier-style three-way merge, pull and contribute → read-only template + own layer, update
+  = switch version.
+- Own manifest `forkable.yaml` → OpenGAP `agent.yaml` + `x-agent8`.
+- `.agentdata` gitignore file (whose trailing `#` comments were invalid gitignore) → anchored
+  patterns inside the manifest.
+- Secrets with targets anywhere (`~/.config/…`) → vault item names, `{{vault:Item.field}}`
+  placeholders, file targets inside the agent's folder only.
+- `providers/<id>/` extras copied into live folders → host-owned files composed by the host.
+- `code`, `permissions` and trust rules → out of the format, into host profiles.
+- Added: the format version rule, the own layer, the instance record by version, plugin export.
+
+## 15. Open questions
+
+1. **Name.** The format has no name yet; the public repo needs one (Teo).
+2. **Sidecar file.** Until OpenGAP accepts `x-` keys, should the block also be allowed in a
+   separate `agent.x-agent8.yaml`, so strict `opengap validate` passes?
+3. **`SOUL.md`.** OpenGAP requires it. Ship a one-line `SOUL.md` pointing at `AGENTS.md`, or
+   ask OpenGAP to make it optional when `AGENTS.md` exists (the RFC asks)?
+4. **`knowledge/` as data.** Reference documents are often part of a template. The ticket says
+   data; a template author may want to keep some (`!/knowledge/…` works today).
+5. **Codex own settings.** Codex has no local-override file like `settings.local.json`; the own
+   layer needs a name for it (`.codex/config.local.toml`?).
+6. **Multi-agent templates** (a team in one repo, OpenGAP `agents/`): out of scope for v0.2.
+7. **Signing** versions (Sigstore, signed tags) before a public marketplace.
+8. **Vault item names.** Placeholders need names without dots or spaces
+   (`^[A-Za-z][A-Za-z0-9_-]{0,63}$`). If the agent8 vault allows freer names, either it adopts
+   the same rule or the placeholder needs quoting (`{{vault:"My key".field}}`).

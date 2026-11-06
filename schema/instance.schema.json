@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent8.sh/spec/agent-format/0.2/instance.schema.json",
+  "title": ".agent8/instance.yaml: the instance record of a copy, format 0.2",
+  "description": "Written by the host at install, update and rollback. Never holds a secret value.",
+  "type": "object",
+  "required": ["format", "template", "installed_at", "answers"],
+  "additionalProperties": false,
+  "properties": {
+    "format": { "type": "string", "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$" },
+    "template": {
+      "allOf": [{ "$ref": "#/$defs/version_ref" }],
+      "required": ["source", "version", "digest"]
+    },
+    "previous": {
+      "allOf": [{ "$ref": "#/$defs/version_ref" }],
+      "required": ["version", "digest"]
+    },
+    "installed_at": { "$ref": "#/$defs/timestamp" },
+    "updated_at": { "$ref": "#/$defs/timestamp" },
+    "answers": {
+      "type": "object",
+      "propertyNames": { "pattern": "^[a-z][a-z0-9_]*$" },
+      "additionalProperties": {
+        "anyOf": [
+          { "type": ["string", "number", "boolean"] },
+          { "type": "array", "items": { "type": "string" } }
+        ]
+      }
+    },
+    "secrets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["item", "status"],
+        "additionalProperties": false,
+        "properties": {
+          "item": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$" },
+          "status": { "enum": ["present", "missing"] }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "timestamp": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+    },
+    "version_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "source": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(-[0-9A-Za-z.-]+)?(\\+[0-9A-Za-z.-]+)?$" },
+        "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "commit": { "type": "string", "pattern": "^[0-9a-f]{7,64}$" },
+        "id": { "type": "string" }
+      }
+    }
+  }
+}
