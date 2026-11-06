@@ -1,0 +1,10 @@
+# The copy's own manifest: an OpenGAP agent that extends its template at one exact version.
+name: sams-memory-agent
+version: 0.0.1
+description: Sam's memory agent
+extends: https://github.com/Teodagher/teo-agent-boilerplate@0.2.0
+x-agent8:
+  format: "0.2"
+  data:
+    # The copy may add data patterns; it can never remove the template's.
+    - /drafts/

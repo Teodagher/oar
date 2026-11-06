@@ -1,0 +1,56 @@
+# A second example: an agent that needs secrets (one by environment, one as a token file),
+# an MCP server and choice-type setup questions. Works with Claude Code and Codex.
+spec_version: "0.1.0"
+name: invoice-chaser
+version: 1.0.0
+description: Follows up on unpaid invoices by email, politely and on schedule.
+author: agent8 examples
+license: MIT
+tags: [finance, email]
+
+x-agent8:
+  format: "0.2"
+  # Skills live in skills/ (the default), the OpenGAP and Claude plugin location.
+  data:
+    - /clients/
+    - /outbox/
+    - /logs/
+    - /.secrets/
+    - "**/*.log"
+  setup:
+    - id: company_name
+      prompt: Your company's name, as it appears on invoices
+      type: string
+      required: true
+    - id: tone
+      prompt: How firm should reminders be?
+      type: choice
+      choices: [gentle, neutral, firm]
+      default: neutral
+    - id: first_reminder_days
+      prompt: Days after the due date before the first reminder
+      type: number
+      default: 3
+    - id: cc_owner
+      prompt: Copy you on every reminder?
+      type: boolean
+      default: true
+  secrets:
+    - item: Stripe
+      description: Reads invoices and their payment status
+      fields: [secret_key]
+      how_to_get: https://dashboard.stripe.com/apikeys (a restricted key with read access to invoices)
+      env:
+        STRIPE_SECRET_KEY: "{{vault:Stripe.secret_key}}"
+    - item: Gmail
+      description: Sends the reminders from your mailbox
+      fields: [client_id, client_secret, refresh_token]
+      files:
+        - path: .secrets/gmail-token.json
+          template: secret-templates/gmail-token.json
+  requires:
+    harnesses:
+      - name: claude-code
+      - name: codex
+    tools: ["node>=20", "python3>=3.9"]
+    logins: [claude]

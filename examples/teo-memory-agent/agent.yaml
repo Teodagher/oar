@@ -1,0 +1,47 @@
+# Modelled on Teodagher/teo-agent-boilerplate (head 0eb0f71), converted to format 0.2.
+# The real conversion of that repo is ticket T-147; this folder is only an example.
+spec_version: "0.1.0"
+name: teo-memory-agent
+version: 0.2.0
+description: A Claude Code agent with durable memory that grows without bloating its context.
+author: Teo Dagher
+license: MIT
+tags: [memory, personal-assistant]
+
+x-agent8:
+  format: "0.2"
+  layout:
+    # Kept in Claude Code's own folder so "Use this template" + `claude` still works.
+    skills: .claude/skills
+  data:
+    # Everything the agent remembers is the owner's, never the template's.
+    - /memory/
+    - /logs/
+    - /exports/
+  setup:
+    - id: owner_name
+      prompt: Your name (the agent's owner)
+      type: string
+      required: true
+    - id: language
+      prompt: Language and tone
+      type: string
+      default: English, short and warm
+    - id: timezone
+      prompt: Timezone
+      type: string
+      default: Europe/Paris
+    - id: interview
+      prompt: Let the agent interview you on first launch?
+      type: boolean
+      default: true
+  # Needs no secret out of the box; tools added later declare theirs.
+  secrets: []
+  requires:
+    harnesses:
+      - name: claude-code
+      - name: codex
+        support: partial
+        note: Reads AGENTS.md and the skills; the hooks (status, raw guard, lint) don't run, so the memory rules are advice only.
+    tools: ["git", "python3>=3.9"]
+    logins: [claude]

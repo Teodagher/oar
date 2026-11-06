@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "stripe": {
+      "command": "npx",
+      "args": ["-y", "@stripe/mcp", "--tools=invoices.read,customers.read"],
+      "env": {
+        "STRIPE_SECRET_KEY": "${STRIPE_SECRET_KEY}"
+      }
+    }
+  }
+}

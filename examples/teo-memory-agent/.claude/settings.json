@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 tools/memory.py:*)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      { "hooks": [ { "type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR/tools/memory.py\" status" } ] }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash",
+        "hooks": [ { "type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR/tools/memory.py\" guard" } ]
+      }
+    ],
+    "Stop": [
+      { "hooks": [ { "type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR/tools/memory.py\" lint --hook" } ] }
+    ]
+  }
+}

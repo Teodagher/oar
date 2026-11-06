@@ -1,0 +1,6 @@
+{
+  "type": "authorized_user",
+  "client_id": "{{vault:Gmail.client_id}}",
+  "client_secret": "{{vault:Gmail.client_secret}}",
+  "refresh_token": "{{vault:Gmail.refresh_token}}"
+}
