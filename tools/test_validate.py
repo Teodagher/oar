@@ -262,7 +262,7 @@ class TestTemplate(Tmp):
                                 ' "b": {"command": "y", "env": {"K": "${UNDECLARED}"}},'
                                 ' "c": {"command": "z", "env": {"K": "${S_KEY}"}}}}')
         text = errors_of(v.validate_template(self.dir))
-        self.assertIn("a.args: secrets must not appear", text)
+        self.assertIn("a.args: a secret's ${NAME} must not appear", text)
         self.assertIn("${UNDECLARED}", text)
         self.assertNotIn(".mcp.json c", text)
 
@@ -285,21 +285,36 @@ class TestTemplate(Tmp):
         os.symlink("/etc/passwd", self.dir / "leak")
         self.assertIn("symlink points outside", errors_of(v.validate_template(self.dir)))
 
-    def test_newer_format_refused_cleanly(self):
-        self.template(MINIMAL.replace('"0.2"', '"0.3"'))
+    def test_newer_major_refused_cleanly(self):
+        self.template(MINIMAL.replace('"0.2"', '"1.0"'))
         with self.assertRaises(v.FormatTooNew) as ctx:
             v.validate_template(self.dir)
-        self.assertIn("needs format 0.3", str(ctx.exception))
+        self.assertIn("needs format 1.0", str(ctx.exception))
         with redirect_stdout(io.StringIO()):
             self.assertEqual(v.main(["x", "template", str(self.dir)]), 3)
-        self.template(MINIMAL.replace('"0.2"', '"1.0"'))
-        with self.assertRaises(v.FormatTooNew):
-            v.validate_template(self.dir)
 
-    def test_older_minor_refused_while_0x(self):
+    def test_newer_minor_is_additive(self):
+        self.template(MINIMAL.replace('"0.2"', '"0.3"') + "  schedules:\n    - daily\n")
+        rep = v.validate_template(self.dir)
+        self.assertEqual(rep.errors, [])
+        self.assertTrue(any("schedules" in i and "ignored" in i for i in rep.infos))
+
+    def test_older_minor_read(self):
         self.template(MINIMAL.replace('"0.2"', '"0.1"'))
-        with self.assertRaises(v.FormatTooOld):
-            v.validate_template(self.dir)
+        self.assertEqual(v.validate_template(self.dir).errors, [])
+
+    def test_placeholders_anywhere_but_declared(self):
+        self.template(MINIMAL + """\
+  secrets:
+    - item: Company card
+      description: pays for things
+      fields: [number]
+""")
+        self.write("skills/pay/SKILL.md", "---\nname: pay\ndescription: pay\n---\nUse {{vault:Company card.number}} and {{vault:Unknown thing}}.\n")
+        self.write(".mcp.json", '{"mcpServers": {"a": {"type": "http", "url": "https://x.example", "headers": {"Authorization": "Bearer {{vault:Company card}}"}}}}')
+        text = errors_of(v.validate_template(self.dir))
+        self.assertIn("'Unknown thing'", text)
+        self.assertNotIn("Company card", text)
 
     def test_plain_opengap_repo(self):
         self.write("agent.yaml", "name: og\nversion: 0.1.0\ndescription: d\n")
@@ -362,7 +377,7 @@ class TestInstance(Tmp):
     def test_newer_record_format_refused(self):
         self.make_copy()
         r = self.record()
-        r.write_text(r.read_text().replace('format: "0.2"', 'format: "0.9"'))
+        r.write_text(r.read_text().replace('format: "0.2"', 'format: "1.0"'))
         with self.assertRaises(v.FormatTooNew):
             v.validate_instance(self.dir)
 

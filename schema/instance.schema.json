@@ -4,27 +4,67 @@
   "title": ".agent8/instance.yaml: the instance record of a copy, format 0.2",
   "description": "Written by the host at install, update and rollback. Never holds a secret value.",
   "type": "object",
-  "required": ["format", "template", "installed_at", "answers"],
+  "required": [
+    "format",
+    "template",
+    "installed_at",
+    "answers"
+  ],
   "additionalProperties": false,
   "properties": {
-    "format": { "type": "string", "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$" },
+    "format": {
+      "type": "string",
+      "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$"
+    },
     "template": {
-      "allOf": [{ "$ref": "#/$defs/version_ref" }],
-      "required": ["source", "version", "digest"]
+      "allOf": [
+        {
+          "$ref": "#/$defs/version_ref"
+        }
+      ],
+      "required": [
+        "source",
+        "version",
+        "digest"
+      ]
     },
     "previous": {
-      "allOf": [{ "$ref": "#/$defs/version_ref" }],
-      "required": ["version", "digest"]
+      "allOf": [
+        {
+          "$ref": "#/$defs/version_ref"
+        }
+      ],
+      "required": [
+        "version",
+        "digest"
+      ]
     },
-    "installed_at": { "$ref": "#/$defs/timestamp" },
-    "updated_at": { "$ref": "#/$defs/timestamp" },
+    "installed_at": {
+      "$ref": "#/$defs/timestamp"
+    },
+    "updated_at": {
+      "$ref": "#/$defs/timestamp"
+    },
     "answers": {
       "type": "object",
-      "propertyNames": { "pattern": "^[a-z][a-z0-9_]*$" },
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9_]*$"
+      },
       "additionalProperties": {
         "anyOf": [
-          { "type": ["string", "number", "boolean"] },
-          { "type": "array", "items": { "type": "string" } }
+          {
+            "type": [
+              "string",
+              "number",
+              "boolean"
+            ]
+          },
+          {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
         ]
       }
     },
@@ -32,11 +72,22 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["item", "status"],
+        "required": [
+          "item",
+          "status"
+        ],
         "additionalProperties": false,
         "properties": {
-          "item": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$" },
-          "status": { "enum": ["present", "missing"] }
+          "item": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-](?:[A-Za-z0-9 _-]{0,62}[A-Za-z0-9_-])?$"
+          },
+          "status": {
+            "enum": [
+              "present",
+              "missing"
+            ]
+          }
         }
       }
     }
@@ -50,11 +101,25 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "source": { "type": "string", "minLength": 1 },
-        "version": { "type": "string", "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(-[0-9A-Za-z.-]+)?(\\+[0-9A-Za-z.-]+)?$" },
-        "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
-        "commit": { "type": "string", "pattern": "^[0-9a-f]{7,64}$" },
-        "id": { "type": "string" }
+        "source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(-[0-9A-Za-z.-]+)?(\\+[0-9A-Za-z.-]+)?$"
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{7,64}$"
+        },
+        "id": {
+          "type": "string"
+        }
       }
     }
   }

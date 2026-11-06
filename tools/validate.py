@@ -28,8 +28,7 @@ except ImportError as exc:  # pragma: no cover
     sys.stderr.write(f"validate.py needs PyYAML and jsonschema: {exc}\n")
     sys.exit(2)
 
-SUPPORTED_FORMAT = (0, 2)
-OLDER_FORMATS_READ: set = set()  # 0.x minors may break; 0.2 reads no older format
+SUPPORTED_FORMAT = (0, 2)  # reads every 0.x; a newer minor's unknown keys are ignored and listed
 HERE = Path(__file__).resolve().parent
 SCHEMA_DIR = HERE.parent / "schema"
 
@@ -43,7 +42,9 @@ MCP_BUILTIN_VARS = {"CLAUDE_PROJECT_DIR", "CLAUDE_PLUGIN_ROOT", "HOME"}
 OPENGAP_DEFAULT_DATA = ["/memory/", "/knowledge/", "/.gitagent/"]
 CLAUDE_MD_ALLOWED = {"@AGENTS.md", "@identity.md", "@LOCAL.md"}
 
-VAULT_RE = re.compile(r"\{\{vault:([A-Za-z][A-Za-z0-9_-]{0,63})(?:\.([A-Za-z0-9_-]+))?\}\}")
+ITEM_NAME = r"[A-Za-z0-9_-](?:[A-Za-z0-9 _-]{0,62}[A-Za-z0-9_-])?"
+VAULT_RE = re.compile(r"\{\{vault:(" + ITEM_NAME + r")(?:\.([A-Za-z0-9_-]+))?\}\}")
+KNOWN_BLOCK_KEYS = {"format", "layout", "data", "setup", "secrets", "env", "repos", "requires"}
 VAULT_LOOSE_RE = re.compile(r"\{\{\s*vault:[^}]*\}\}")
 ANSWER_RE = re.compile(r"\{\{answer:([a-z][a-z0-9_]*)\}\}")
 ENV_REF_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-[^}]*)?\}")
@@ -179,6 +180,13 @@ def _glob_to_regex(glob: str) -> str:
     return "".join(out)
 
 
+def _list_unknown_keys(block: dict, rep: Report, where: str) -> None:
+    unknown = sorted(k for k in block if k not in KNOWN_BLOCK_KEYS)
+    if unknown:
+        rep.info(f"{where} also uses {', '.join(unknown)}, unknown to format "
+                 f"{SUPPORTED_FORMAT[0]}.{SUPPORTED_FORMAT[1]}; ignored (from a newer minor format?)")
+
+
 def check_data_patterns(patterns: list, rep: Report, where: str = "x-agent8.data") -> None:
     for p in patterns:
         if not isinstance(p, str) or not p:
@@ -234,13 +242,13 @@ def check_format(value, label: str) -> None:
         return  # the schema reports the bad shape
     major, minor = (int(x) for x in value.split("."))
     smaj, smin = SUPPORTED_FORMAT
-    if (major, minor) > (smaj, smin):
+    if major > smaj:
         raise FormatTooNew(
-            f"{label} needs format {value}; this validator understands up to "
-            f"{smaj}.{smin}. Update it and try again."
+            f"{label} needs format {value} (a new major); this validator reads {smaj}.x. "
+            "Update it and try again."
         )
-    if (major, minor) != (smaj, smin) and value not in OLDER_FORMATS_READ and not (major == smaj and major >= 1):
-        raise FormatTooOld(f"{label} uses format {value}, which this validator no longer reads (it reads {smaj}.{smin}).")
+    if major < smaj:
+        raise FormatTooOld(f"{label} uses format {value}; this validator reads {smaj}.x only.")
 
 
 def parse_extends(value: str):
@@ -382,6 +390,7 @@ def validate_template(root: Path) -> Report:
         return _validate_plain_opengap(root, manifest, rep)
     if isinstance(block, dict):
         check_format(block.get("format"), "this template")
+        _list_unknown_keys(block, rep, "x-agent8")
     schema_check(manifest, "manifest.schema.json", rep, "agent.yaml")
     if not isinstance(block, dict):
         return rep
@@ -472,8 +481,9 @@ def validate_template(root: Path) -> Report:
             if looks_secret(text):
                 rep.error(f"{rel}: contains what looks like a secret value")
 
-    env_names = _check_secrets(root, secrets, rep) | set((block.get("env") or {}).keys())
-    _check_mcp(root, env_names, rep)
+    secret_env = _check_secrets(root, secrets, rep)
+    env_names = secret_env | set((block.get("env") or {}).keys())
+    _check_mcp(root, env_names, rep, secret_env)
     _check_skills(root, layout, rep)
     _check_vault_mentions(root, files, secrets, rep)
     _list_code(root, files, rep)
@@ -544,7 +554,7 @@ def _check_placeholders(text: str, items: dict, rep: Report, where: str) -> None
             rep.error(f"{where}: {m.group(0)} uses field {fld!r}, not in the item's declared fields")
 
 
-def _check_mcp(root: Path, env_names: set, rep: Report) -> None:
+def _check_mcp(root: Path, env_names: set, rep: Report, secret_env: set = frozenset()) -> None:
     path = root / ".mcp.json"
     if not path.is_file():
         return
@@ -565,11 +575,9 @@ def _check_mcp(root: Path, env_names: set, rep: Report) -> None:
             if any(isinstance(x, str) and x.startswith(("/", "~")) for x in vals):
                 rep.error(f".mcp.json {name}.{key}: absolute path; use ${{CLAUDE_PROJECT_DIR}} so the agent can live anywhere")
             raw = json.dumps(cfg.get(key, ""))
-            if VAULT_LOOSE_RE.search(raw) or any(v not in MCP_BUILTIN_VARS for v in ENV_REF_RE.findall(raw)):
-                rep.error(f".mcp.json {name}.{key}: secrets must not appear in {key} (it shows in the process list); use env or headers")
+            if any(v in secret_env for v in ENV_REF_RE.findall(raw)):
+                rep.error(f".mcp.json {name}.{key}: a secret's ${{NAME}} must not appear in {key} (it shows in the process list); use env or headers")
         raw = json.dumps(cfg)
-        if VAULT_LOOSE_RE.search(raw):
-            rep.error(f".mcp.json {name}: use ${{NAME}} with a secret's env, not {{{{vault:…}}}}")
         for var in ENV_REF_RE.findall(raw):
             if var not in env_names and var not in MCP_BUILTIN_VARS:
                 rep.error(f".mcp.json {name}: ${{{var}}} is not an env name declared by any secret")
@@ -650,13 +658,15 @@ def _check_skills(root: Path, layout: str, rep: Report) -> None:
 
 
 def _check_vault_mentions(root: Path, files: list, secrets: list, rep: Report) -> None:
-    tmpl_files = {f.get("template") for s in secrets if isinstance(s, dict) for f in (s.get("files") or []) if isinstance(f, dict)}
+    """Placeholders may appear anywhere (vault placeholders decision); each item must be declared."""
+    items = {s["item"]: s for s in secrets if isinstance(s, dict) and isinstance(s.get("item"), str)}
+    tmpl_files = {f.get("template") for s in items.values() for f in (s.get("files") or []) if isinstance(f, dict)}
     for rel in files:
-        if rel in tmpl_files or rel == "agent.yaml" or rel == ".mcp.json":
-            continue
+        if rel in tmpl_files or rel == "agent.yaml":
+            continue  # checked with their secret
         text = read_text(root / rel)
-        if text and VAULT_RE.search(text) and not rel.endswith(".md"):
-            rep.warn(f"{rel}: has a {{{{vault:…}}}} placeholder, but only secret file templates are filled in")
+        if text and VAULT_LOOSE_RE.search(text):
+            _check_placeholders(text, items, rep, rel)
 
 
 def _list_code(root: Path, files: list, rep: Report) -> None:
@@ -720,6 +730,13 @@ def validate_instance(root: Path) -> Report:
     if not isinstance(record, dict) or not isinstance(manifest, dict):
         return rep
 
+    known = {"format", "template", "previous", "installed_at", "updated_at", "answers", "secrets"}
+    extra = sorted(k for k in record if k not in known)
+    if extra:
+        rep.info(f".agent8/instance.yaml also has {', '.join(extra)}; ignored (from a newer minor format?)")
+        record = {k: val for k, val in record.items() if k in known}
+    if isinstance(manifest.get("x-agent8"), dict):
+        _list_unknown_keys(manifest["x-agent8"], rep, "agent.yaml x-agent8")
     schema_check(record, "instance.schema.json", rep, ".agent8/instance.yaml")
     schema_check(manifest, "manifest.schema.json", rep, "agent.yaml")
     ext = parse_extends(manifest.get("extends"))

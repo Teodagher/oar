@@ -144,19 +144,18 @@ x-agent8:
 ### 3.2 `format` — the format version
 
 `format` is `"<major>.<minor>"` and names the version of *this* spec (`"0.2"` here). It is
-independent of the template's own `version` and of OpenGAP's `spec_version`.
+independent of the template's own `version` and of OpenGAP's top-level `spec_version` (which
+is why it isn't called `spec_version`). Write it quoted: unquoted, YAML reads `0.2` as a number.
 
-Write it quoted (`"0.2"`): unquoted, YAML reads `0.2` as a number.
-
-A host:
-- MUST refuse a format newer than the newest it implements, **before** writing anything, with
-  a plain message that names both versions, e.g. *"This template needs format 0.3; this helper
-  understands up to 0.2. Update the helper and try again."*;
-- MUST read its own format, and reads older formats only if it says so: while the major is
-  `0`, every minor may break, so a host lists the older minors it still reads (format 0.2 has
-  no older version: the v0.1 draft is a different format);
-- from `1.0`, a new minor only adds optional fields, and a host reads every lower minor of its
-  major.
+- **A new minor is additive**: it only adds optional keys. A host that reads `M.N` reads every
+  `M.x`. Keys it doesn't know (from a newer minor) are **ignored and listed** to the person
+  ("this template also uses: …, which this server's agent8 doesn't know yet"); they never
+  stop an install.
+- **A new major is breaking**: a host MUST refuse a major it doesn't read, **before** writing
+  anything, with a plain message, e.g. *"This server's agent8 needs updating to install this
+  template (it needs format 2.0)."*
+- An author (or the host that publishes a template) stamps the **lowest** format that covers
+  what the template uses, so it stays installable on older hosts.
 
 The instance record (§9.3) carries the same field, with the same rule.
 
@@ -353,7 +352,7 @@ document).
 
 | Field | Notes |
 |---|---|
-| `item` | the vault item name, `^[A-Za-z][A-Za-z0-9_-]{0,63}$` (no dot, so `Item.field` reads one way), unique in the list |
+| `item` | the vault item name: letters, digits, spaces, `_` and `-`, at most 64 characters, starting and ending with a letter, digit, `_` or `-` (`Company card` is fine; no dot, so `Item.field` reads one way); unique in the list |
 | `description` | why the agent needs it, shown on an import page |
 | `fields` | optional list of the fields it uses (`[secret_key]`) |
 | `required` | default `true` |
@@ -366,19 +365,25 @@ what an agent may read (agent8 does so for another author's template, see the pr
 
 ### 8.2 Placeholders
 
-One syntax, used in `env` values and in secret file templates:
+One syntax, the vault's own:
 
 ```
-{{vault:Item}}          the whole item (a JSON object; a single value as a string)
-{{vault:Item.field}}    one field
+{{vault:Item name}}          the whole item (a JSON object; a single value as a string)
+{{vault:Item name.field}}    one field
 ```
 
-`Item` MUST be declared in `secrets`; `field`, if the item lists `fields`, MUST be one of them.
+A template MAY use placeholders **anywhere** (instructions, skills, `.mcp.json` headers, scripts,
+secret file templates, `env` values): how and where the real value is swapped in is the host's
+job (agent8's placeholder engine swaps it only towards the item's allowed destinations, see the
+profile). The format's one rule: **every item a template names MUST be declared in `secrets`**,
+and a `field`, if the item lists `fields`, MUST be one of them. That list is what an import page
+shows and what a host may limit the agent to.
 
-`.mcp.json` keeps the standard `${NAME}` form, which Claude Code and others expand from the
-environment. Every `${NAME}` in the template's `.mcp.json` MUST be declared, by a secret's
-`env` or by `env` (§3.6), or be one of `CLAUDE_PROJECT_DIR`, `CLAUDE_PLUGIN_ROOT`, `HOME`. Placeholders MUST NOT
-appear in `command` or `args`, which show up in the process list; use `env` or `headers`.
+`.mcp.json` may also use the standard `${NAME}` form, which Claude Code and others expand from
+the environment. Every `${NAME}` in the template's `.mcp.json` MUST be declared, by a secret's
+`env` or by `env` (§3.6), or be one of `CLAUDE_PROJECT_DIR`, `CLAUDE_PLUGIN_ROOT`, `HOME`. A
+`${NAME}` that carries a secret MUST NOT appear in `command` or `args`: once expanded it shows
+in the process list.
 
 ### 8.3 File targets
 
@@ -597,6 +602,3 @@ an answer. [`tools/validate.py`](tools/validate.py) checks both.
    channels loaded at start); should `requires.harnesses` carry extra launch arguments?
 9. **Plugins from other marketplaces.** `requires.plugins` names `name@marketplace` but not where
    the marketplace lives; plugin-managed secrets outside the folder can't be declared.
-10. **Vault item names.** Placeholders need names without dots or spaces
-   (`^[A-Za-z][A-Za-z0-9_-]{0,63}$`). If the agent8 vault allows freer names, either it adopts
-   the same rule or the placeholder needs quoting (`{{vault:"My key".field}}`).

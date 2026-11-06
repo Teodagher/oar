@@ -5,15 +5,19 @@ does with them: hosting, launch, trust, the vault and the files it composes. Ano
 implement the format with a different profile. Nothing here is needed to write a template.
 
 Decisions behind it (agent8 repo): template plus own layer, where templates live, the company
-vault, vault items are objects, autonomy first, one account per agent (all 2026-11-06).
+vault, vault items are objects, vault placeholders, helper capabilities and compatibility,
+autonomy first, one account per agent (all 2026-11-06).
 
 ## 1. Format support
 
-- The helper declares the highest format it understands (`0.2` at first). It refuses a newer
-  manifest or instance record before writing anything, with the message of SPEC §3.2, and the
-  app shows *"This template needs a newer helper — Update"* with the existing Update button.
+- The helper reports the formats it reads in its capability list
+  (`"template-install": {…, "spec": ["0.2"]}`, helper compatibility decision, 2026-11-06). A
+  template whose major it doesn't read is refused before anything is written, and the app shows
+  *"This server's agent8 needs updating to install this template"* with the Update button. A
+  newer minor installs; the keys the helper doesn't know are listed on the import screen.
 - The board stores `format` with each template version, so the app can warn before an import
-  is even sent to a server whose helper is too old.
+  is even sent to a server whose helper is too old. Making a template (T-142) stamps the lowest
+  format that covers what it uses.
 
 ## 2. Sources and hosting
 
@@ -72,6 +76,10 @@ agent8 adds, after the template and the own layer (SPEC §6):
   screen shows the list with a switch "give it the whole vault"; nobody is prompted. Copies of
   your own templates read the whole workspace vault. A take-down of a version cuts its copies
   off.
+- **Placeholders.** `{{vault:Item name.field}}` written anywhere in the template or by the agent is
+  swapped by agent8 (network relay, agent8 tools, browser, or local hand-off with masked output),
+  only towards the item's allowed destinations, and logged (vault placeholders decision). The
+  template's `secrets` list is what such an agent may name when its vault scope is `declared`.
 - **`env`.** At launch the helper fetches each declared `env` value through `vault_fetch`,
   writes them to a file readable only by the agent's account, the launch reads it and deletes
   it. Never through the command line or `tmux -e` (both show in the process list).
