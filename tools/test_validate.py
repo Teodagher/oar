@@ -209,12 +209,14 @@ class TestTemplate(Tmp):
       env:
         AUTH_HEADER: "Bearer {{vault:Api.token}}"
         PLAIN: "no placeholder"
+        SMUGGLED: "sk_test_abc {{vault:Api.token}}"
 """)
         self.write(".mcp.json", '{"mcpServers": {"a": {"command": "npx", "env": {"D": "${CONFIG_DIR}", "H": "${AUTH_HEADER}"}}}}')
         text = errors_of(v.validate_template(self.dir))
         self.assertIn("answer:ghost", text)
         self.assertIn("LEAK", text)
         self.assertIn("PLAIN", text)
+        self.assertIn("SMUGGLED", text)
         self.assertNotIn("AUTH_HEADER", text)
         self.assertNotIn("CONFIG_DIR", text)
 

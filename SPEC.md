@@ -357,7 +357,7 @@ document).
 | `fields` | optional list of the fields it uses (`[secret_key]`) |
 | `required` | default `true` |
 | `how_to_get` | optional URL or sentence |
-| `env` | optional map `ENV_NAME: "<text with at least one {{vault:…}}>"`, given to the agent at launch (`"Bearer {{vault:Api.token}}"` works) |
+| `env` | optional map `ENV_NAME: "{{vault:…}}"`, given to the agent at launch: exactly one placeholder, optionally after `Bearer ` or `Basic ` (`"Bearer {{vault:Api.token}}"` works); nothing else, so no value can sit beside it |
 | `files` | optional list of files written into the agent's folder from a template file (§8.3) |
 
 Declaring an item says "this agent may need it". It is also what a host can use to narrow

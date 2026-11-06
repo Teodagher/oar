@@ -46,6 +46,9 @@ ITEM_NAME = r"[A-Za-z0-9_-](?:[A-Za-z0-9 _-]{0,62}[A-Za-z0-9_-])?"
 VAULT_RE = re.compile(r"\{\{vault:(" + ITEM_NAME + r")(?:\.([A-Za-z0-9_-]+))?\}\}")
 KNOWN_BLOCK_KEYS = {"format", "layout", "data", "setup", "secrets", "env", "repos", "requires"}
 VAULT_LOOSE_RE = re.compile(r"\{\{\s*vault:[^}]*\}\}")
+# A secret env value: exactly one placeholder, with at most a "Bearer " or
+# "Basic " prefix. Anything more could carry a value next to it.
+SECRET_ENV_RE = re.compile(r"(?:(?:Bearer|Basic) )?" + VAULT_RE.pattern)
 ANSWER_RE = re.compile(r"\{\{answer:([a-z][a-z0-9_]*)\}\}")
 ENV_REF_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-[^}]*)?\}")
 SKILL_NAME_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
@@ -524,6 +527,8 @@ def _check_secrets(root: Path, secrets: list, rep: Report) -> set:
             _check_placeholders(str(value), items, rep, f"secrets {s['item']} env {name}")
             if not VAULT_RE.search(str(value)):
                 rep.error(f"secrets {s['item']} env {name}: has no {{{{vault:…}}}} placeholder; plain values go in x-agent8.env")
+            elif not SECRET_ENV_RE.fullmatch(str(value)):
+                rep.error(f"secrets {s['item']} env {name}: must be exactly one {{{{vault:…}}}} placeholder, optionally after \"Bearer \" or \"Basic \"")
         for f in s.get("files") or []:
             if not isinstance(f, dict):
                 continue

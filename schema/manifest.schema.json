@@ -375,7 +375,8 @@
           },
           "additionalProperties": {
             "type": "string",
-            "pattern": "\\{\\{vault:[A-Za-z0-9_-](?:[A-Za-z0-9 _-]{0,62}[A-Za-z0-9_-])?(\\.[A-Za-z0-9_-]+)?\\}\\}"
+            "pattern": "^(?:(?:Bearer|Basic) )?\\{\\{vault:[A-Za-z0-9_-](?:[A-Za-z0-9 _-]{0,62}[A-Za-z0-9_-])?(\\.[A-Za-z0-9_-]+)?\\}\\}$",
+            "description": "Exactly one placeholder, optionally after \"Bearer \" or \"Basic \"."
           }
         },
         "files": {
