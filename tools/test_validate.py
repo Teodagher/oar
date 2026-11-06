@@ -356,11 +356,11 @@ class TestInstance(Tmp):
     def test_answers_checked(self):
         self.make_copy()
         r = self.record()
-        r.write_text(r.read_text().replace("  owner_name: Sam\n", "  later_question: kept\n").replace("interview: true", "interview: maybe"))
+        r.write_text(r.read_text().replace("  owner_name: Sam\n", "  later_question: kept\n").replace("timezone: Europe/London", "timezone: 42"))
         text = errors_of(v.validate_instance(self.dir))
         self.assertNotIn("later_question", text)  # kept for a rollback, not an error
         self.assertIn("required setup question 'owner_name'", text)
-        self.assertIn("answer 'interview' does not fit", text)
+        self.assertIn("answer 'timezone' does not fit", text)
 
     def test_copy_cannot_change_setup(self):
         self.make_copy()

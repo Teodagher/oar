@@ -1,6 +1,6 @@
 # About this example
 
-What `teo-memory-agent` 0.2.0 looks like once installed for Sam (SPEC §9). Kept here:
+What `teo-memory-agent` (the boilerplate at v0.2.0) looks like once installed for Sam (SPEC §9). Kept here:
 
 - `.agent8/instance.yaml`: the instance record (answers, never secret values);
 - `.agent8/template/0.2.0`: the read-only template. In this repo it is a symlink to

@@ -2,13 +2,12 @@ format: "0.2"
 template:
   source: https://github.com/Teodagher/teo-agent-boilerplate
   version: 0.2.0
-  digest: sha256:8698adac009185dc65499659ec23c31dfd7a7e8bdd34add6db01da8623fbad18
-  commit: 0eb0f71
+  digest: sha256:6cd92091e30f21133f83c6c4c3bafaa08fc863014269a0e961ce2c734d4129f6
+  commit: 56fcd2b7401c7861bffa789037444a5f87464174
 installed_at: 2026-11-06T15:00:00Z
 updated_at: 2026-11-06T15:00:00Z
 answers:
   owner_name: Sam
   language: English, short and warm
   timezone: Europe/London
-  interview: true
 secrets: []

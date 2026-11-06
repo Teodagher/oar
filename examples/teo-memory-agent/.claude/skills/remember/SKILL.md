@@ -5,14 +5,26 @@ description: "Write new information into memory. Use whenever something new arri
 
 # Remember
 
-Every new piece of information is a source: keep it verbatim in `memory/raw/`, then update the
-pages it changes. Format: `.claude/rules/memory-writing.md`.
+Every new piece of information is a source: keep it verbatim in `memory/raw/`, then update the pages
+it changes. Format: `.claude/rules/memory-writing.md`.
 
-1. **File the source** (skip chit-chat; when unsure, keep it). Redact secrets first.
-   `python3 tools/memory.py file --text - --date <when said> --kind chat --slug <short-name>`
-   with the text on stdin, or `file <path> …` for a file.
-2. **Update the pages**: find each page the source touches (index, then
-   `grep -ril "<name>" memory/wiki`); create missing ones with `memory.py new <type> "Title"`.
-   Edit the synthesis with targeted deltas and append an evidence line citing the raw file.
-3. **Open loops** go in `memory/now.md`. Owner feedback becomes a `lesson` page.
-4. `python3 tools/memory.py log remember "<what>"`, then `index`.
+1. **File the source** (skip chit-chat; when unsure, keep it, raw is cheap). Redact secrets first.
+   - Chat or pasted text, with who said it and when:
+     ```
+     python3 tools/memory.py file --text - --date <event date> --kind chat --slug <slug> <<'EOF'
+     2026-02-10, Sam (owner): "From now on, invoices go by email, never by post."
+     EOF
+     ```
+   - A file: `python3 tools/memory.py file <path> --date <event date> --kind <kind> --slug <slug>`
+   - It prints the citation, e.g. `[[raw/2026-02-10_chat_invoices-by-email.md]]`.
+2. **Update pages**, one fact at a time:
+   - Find the page (index, `grep -ril "<name or alias>" memory/wiki`); none → `memory.py new <type> "Title"`.
+   - Edit the synthesis sentences that changed, bump `updated`, add aliases, fill `summary`.
+   - Append the evidence line: `- 2026-02-10 · Invoices go by email, never by post — [[raw/2026-02-10_chat_invoices-by-email.md]]`
+   - Decided → `decision` page. Owner feedback → `lesson` (What / Why / How to apply; `summary` = the rule).
+     A how-to → `procedure`. A contradiction → `SUPERSEDES:` line, the synthesis takes the new value.
+3. **Open loops** → `memory/now.md` (with `due:`); finished ones → delete the line, `memory.py log done "..."`.
+4. **Close**: `python3 tools/memory.py log remember "<source>: <pages touched>"`, `index`, `lint` (0 errors),
+   `python3 tools/memory.py commit "memory: <what was learned>"`. One line to the owner if present.
+
+Touch only what the source changes. Never rewrite a page.

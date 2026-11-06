@@ -1,3 +1,4 @@
-# Log
+# Memory log
 
-<!-- One line per event: `- YYYY-MM-DD op · title`. Newest last. -->
+Append-only. Written by `python3 tools/memory.py log <op> "title"`; never edit past lines.
+
