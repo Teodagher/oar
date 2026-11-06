@@ -36,7 +36,10 @@ vault, vault items are objects, autonomy first, one account per agent (all 2026-
    - `.agent8/template/<version>/` owned by **root** and not writable when the agent has its
      own Linux account (`a8-<name>`); `chmod a-w` on the shared `agent8` account (which the
      agent could undo — the app says so);
-   - seeds, the own layer, the copy's `agent.yaml`, `.agent8/instance.yaml`;
+   - the mirrored template files as read-only copies (never symlinks), seeds, the own layer,
+     the copy's `agent.yaml`, `.agent8/instance.yaml`;
+   - each `repos` entry, cloned with the person's own GitHub connection or the server's git
+     access; a private repo the person can't read stops the install with a plain message;
    - the host-owned files (§5 below).
 4. The board records `user_agents.template_version_id`.
 
@@ -56,7 +59,11 @@ agent8 adds, after the template and the own layer (SPEC §6):
 - `.mcp.json`: the `agent8` MCP server (vault tools, channels, AgentCom), always present.
 - `.claude/settings.json`: the permission recipe of the agent (bypass by default) and agent8's
   own hooks, if any. Entries the template declares stay.
-- `.codex/config.toml`: the same `agent8` MCP server.
+- `.codex/config.toml`: the same `agent8` MCP server; every `${NAME}` of a server becomes its
+  `env_vars` list, since Codex doesn't expand placeholders.
+- Before each rebuild, the helper compares the files with what it last wrote. A server added to
+  `.mcp.json` (for example by `claude mcp add --scope project`) moves to `mcp.local.json`; other
+  edits are listed on the agent's page ("changed by hand, will be rebuilt").
 
 ## 6. Vault
 
@@ -70,7 +77,12 @@ agent8 adds, after the template and the own layer (SPEC §6):
   it. Never through the command line or `tmux -e` (both show in the process list).
 - **`files`.** Rendered at launch from the template file, written `0600` (owner-only) at the
   declared path inside the agent's folder, refreshed when the item changes, removed when the
-  item is revoked.
+  item is revoked. With `agent_writes: true` the helper writes it only if it is missing or the
+  item changed since; when the agent rewrites it (a refreshed token), the helper saves it back
+  as a new version of the item if agents may update that item (items an agent created), and
+  otherwise shows "needs saving to the vault" on the agent's page.
+- **Plain `env`.** `{{folder}}` and `{{answer:…}}` filled in at launch, same file as the secret
+  variables.
 - Missing required items: the agent still starts; the app shows *"needs Google"* on its row
   and the instance record says `status: missing`.
 

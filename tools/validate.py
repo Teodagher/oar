@@ -29,10 +29,14 @@ except ImportError as exc:  # pragma: no cover
     sys.exit(2)
 
 SUPPORTED_FORMAT = (0, 2)
+OLDER_FORMATS_READ: set = set()  # 0.x minors may break; 0.2 reads no older format
 HERE = Path(__file__).resolve().parent
 SCHEMA_DIR = HERE.parent / "schema"
 
 OWN_LAYER_ROOT = {"identity.md", "LOCAL.md", "mcp.local.json", "agent.yaml"}
+OWN_LAYER_PATHS = OWN_LAYER_ROOT | {".claude/settings.local.json"}
+OWN_LAYER_DIRS = {"skills"}
+SKILL_LAYOUTS = ("skills", ".agents/skills", ".claude/skills")
 HOST_OWNED = {"AGENTS.md", "CLAUDE.md", ".mcp.json", ".claude/settings.json", ".codex/config.toml"}
 HOST_OWNED_DIRS = {".claude/skills", ".agents/skills", ".agent8"}
 MCP_BUILTIN_VARS = {"CLAUDE_PROJECT_DIR", "CLAUDE_PLUGIN_ROOT", "HOME"}
@@ -57,10 +61,15 @@ SECRET_CONTENT_RES = [
     re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
     re.compile(r"\bxox[abprs]-[0-9A-Za-z-]{10,}"),
     re.compile(r"\bAIza[0-9A-Za-z_-]{35}\b"),
+    re.compile(r"\bsk-[0-9A-Za-z]{32,}"),
 ]
 
 
 class FormatTooNew(Exception):
+    pass
+
+
+class FormatTooOld(Exception):
     pass
 
 
@@ -225,11 +234,13 @@ def check_format(value, label: str) -> None:
         return  # the schema reports the bad shape
     major, minor = (int(x) for x in value.split("."))
     smaj, smin = SUPPORTED_FORMAT
-    if major != smaj or minor > smin:
+    if (major, minor) > (smaj, smin):
         raise FormatTooNew(
             f"{label} needs format {value}; this validator understands up to "
             f"{smaj}.{smin}. Update it and try again."
         )
+    if (major, minor) != (smaj, smin) and value not in OLDER_FORMATS_READ and not (major == smaj and major >= 1):
+        raise FormatTooOld(f"{label} uses format {value}, which this validator no longer reads (it reads {smaj}.{smin}).")
 
 
 def parse_extends(value: str):
@@ -260,6 +271,13 @@ def walk(root: Path, rep: Report):
                     if name in dirnames:
                         dirnames.remove(name)
                     continue
+                if os.path.isabs(os.readlink(full)):
+                    rep.error(f"{rel}: symlink is absolute; make it relative so the folder can move")
+            if name == ".git" and rel_dir != "":
+                rep.error(f"{rel}: a nested git repository; declare it in x-agent8.repos instead")
+                if name in dirnames:
+                    dirnames.remove(name)
+                continue
             if name == ".gitmodules" and rel_dir == "":
                 rep.error(".gitmodules: git submodules are not allowed in v0.2")
             yield rel, name in dirnames
@@ -317,9 +335,32 @@ def frontmatter(text: str):
 
 
 def safe_rel(path: str) -> bool:
+    """Relative, normalised, inside the folder: no ./, .., ~, leading /, backslash or empty part."""
     if not path or path.startswith(("/", "~")) or "\\" in path:
         return False
-    return ".." not in path.split("/")
+    return all(part not in ("", ".", "..") for part in path.split("/"))
+
+
+def protected_target(p: str):
+    """Why a path inside the folder can't be written by the host for a template, or None."""
+    first = p.split("/")[0]
+    if first in (".agent8", ".git"):
+        return f"under {first}/"
+    if p in HOST_OWNED or any(p == d or p.startswith(d + "/") for d in HOST_OWNED_DIRS):
+        return "a host-owned path"
+    if p in OWN_LAYER_PATHS or any(p == d or p.startswith(d + "/") for d in OWN_LAYER_DIRS):
+        return "an own-layer path"
+    return None
+
+
+def skills_layout(root: Path, block: dict) -> str:
+    layout = (block.get("layout") or {}).get("skills")
+    if layout:
+        return layout
+    for cand in SKILL_LAYOUTS:
+        if (root / cand).is_dir():
+            return cand
+    return "skills"
 
 
 # ---------------------------------------------------------------- template
@@ -352,7 +393,7 @@ def validate_template(root: Path) -> Report:
     check_data_patterns(data_patterns, rep)
     secrets = block.get("secrets") or []
     setup = block.get("setup") or []
-    layout = (block.get("layout") or {}).get("skills", "skills")
+    layout = skills_layout(root, block)
 
     secret_targets = set()
     for s in secrets:
@@ -360,6 +401,8 @@ def validate_template(root: Path) -> Report:
             if isinstance(f, dict) and isinstance(f.get("path"), str):
                 secret_targets.add(f["path"].strip("/"))
     data = DataList([p for p in data_patterns if isinstance(p, str)])
+    _check_repos(block.get("repos") or [], data, rep)
+    _check_env(block.get("env") or {}, setup if isinstance(setup, list) else [], rep)
 
     entries = list(walk(root, rep))
     files = [r for r, d in entries if not d]
@@ -402,6 +445,7 @@ def validate_template(root: Path) -> Report:
             rep.error(f"{rel}: matches the data list; data never ships in a template (move a starting version to seed/{rel})")
         if rel in secret_targets:
             rep.error(f"{rel}: is a secret file target; the host writes it, the template must not ship it")
+        _check_absolute_in_text(root, rel, rep)
         if SECRET_FILE_RE.search(rel):
             rep.error(f"{rel}: looks like a secret file; templates name secrets, they never hold them")
             continue
@@ -428,7 +472,7 @@ def validate_template(root: Path) -> Report:
             if looks_secret(text):
                 rep.error(f"{rel}: contains what looks like a secret value")
 
-    env_names = _check_secrets(root, secrets, rep)
+    env_names = _check_secrets(root, secrets, rep) | set((block.get("env") or {}).keys())
     _check_mcp(root, env_names, rep)
     _check_skills(root, layout, rep)
     _check_vault_mentions(root, files, secrets, rep)
@@ -468,16 +512,17 @@ def _check_secrets(root: Path, secrets: list, rep: Report) -> set:
                 rep.error(f"secrets: env {name} is set by two secrets")
             env_names.add(name)
             _check_placeholders(str(value), items, rep, f"secrets {s['item']} env {name}")
+            if not VAULT_RE.search(str(value)):
+                rep.error(f"secrets {s['item']} env {name}: has no {{{{vault:…}}}} placeholder; plain values go in x-agent8.env")
         for f in s.get("files") or []:
             if not isinstance(f, dict):
                 continue
             path, tmpl = f.get("path"), f.get("template")
             if isinstance(path, str):
-                p = path.strip("/") if safe_rel(path) else None
-                if p is None:
-                    rep.error(f"secrets {s['item']}: file target {path!r} must stay inside the agent's folder (relative, no .., no ~)")
-                elif p.split("/")[0] == ".agent8" or p in HOST_OWNED or p in OWN_LAYER_ROOT or any(p == d or p.startswith(d + "/") for d in HOST_OWNED_DIRS):
-                    rep.error(f"secrets {s['item']}: file target {path!r} is a host-owned or own-layer path")
+                if not safe_rel(path):
+                    rep.error(f"secrets {s['item']}: file target {path!r} must stay inside the agent's folder (relative and normalised: no ./, .., ~ or leading /)")
+                elif (why := protected_target(path)) or (root / path).exists():
+                    rep.error(f"secrets {s['item']}: file target {path!r} is {why or 'a file of the template'}; secret files may not replace it")
             if isinstance(tmpl, str):
                 if not safe_rel(tmpl) or not (root / tmpl).is_file():
                     rep.error(f"secrets {s['item']}: template file {tmpl!r} is not in the template")
@@ -516,6 +561,9 @@ def _check_mcp(root: Path, env_names: set, rep: Report) -> None:
         if not isinstance(cfg, dict):
             continue
         for key in ("command", "args"):
+            vals = cfg.get(key) if isinstance(cfg.get(key), list) else [cfg.get(key, "")]
+            if any(isinstance(x, str) and x.startswith(("/", "~")) for x in vals):
+                rep.error(f".mcp.json {name}.{key}: absolute path; use ${{CLAUDE_PROJECT_DIR}} so the agent can live anywhere")
             raw = json.dumps(cfg.get(key, ""))
             if VAULT_LOOSE_RE.search(raw) or any(v not in MCP_BUILTIN_VARS for v in ENV_REF_RE.findall(raw)):
                 rep.error(f".mcp.json {name}.{key}: secrets must not appear in {key} (it shows in the process list); use env or headers")
@@ -527,6 +575,54 @@ def _check_mcp(root: Path, env_names: set, rep: Report) -> None:
                 rep.error(f".mcp.json {name}: ${{{var}}} is not an env name declared by any secret")
         if looks_secret(raw):
             rep.error(f".mcp.json {name}: contains what looks like a secret value")
+
+
+def _check_repos(repos: list, data: DataList, rep: Report) -> None:
+    seen = set()
+    for r in repos:
+        if not isinstance(r, dict) or not isinstance(r.get("path"), str):
+            continue
+        path = r["path"]
+        if path in seen:
+            rep.error(f"repos: {path!r} is listed twice")
+        seen.add(path)
+        if not safe_rel(path):
+            rep.error(f"repos {path!r}: must stay inside the agent's folder (relative and normalised)")
+        elif why := protected_target(path):
+            rep.error(f"repos {path!r}: is {why}")
+        elif not data.matches(path, is_dir=True):
+            rep.error(f"repos {path!r}: must match the data list (a cloned repo belongs to the copy)")
+
+
+def _check_env(env: dict, setup: list, rep: Report) -> None:
+    ids = {q.get("id") for q in setup if isinstance(q, dict)}
+    for name, value in env.items():
+        text = str(value)
+        if VAULT_LOOSE_RE.search(text):
+            rep.error(f"env {name}: secrets go in secrets[].env, not in env")
+        for qid in ANSWER_RE.findall(text):
+            if qid not in ids:
+                rep.error(f"env {name}: {{{{answer:{qid}}}}} names no setup question")
+        for ph in re.findall(r"\{\{([^}]*)\}\}", text):
+            if ph != "folder" and not ph.startswith("answer:"):
+                rep.error(f"env {name}: unknown placeholder {{{{{ph}}}}}")
+        if looks_secret(text):
+            rep.error(f"env {name}: looks like a secret value")
+
+
+def _check_absolute_in_text(root: Path, rel: str, rep: Report) -> None:
+    if rel != ".claude/settings.json":
+        return
+    try:
+        hooks = json.loads((root / rel).read_text(encoding="utf-8")).get("hooks") or {}
+    except (ValueError, OSError, AttributeError):
+        return
+    for event, groups in hooks.items():
+        for g in groups or []:
+            for h in (g.get("hooks") or []) if isinstance(g, dict) else []:
+                cmd = str(h.get("command", "")) + " " + " ".join(map(str, h.get("args", []) or []))
+                if re.search(r"(^|\s|[\"'])(/(home|root|Users|srv|opt)/|~/)", cmd):
+                    rep.error(f"{rel} hook {event}: absolute path in {cmd.strip()!r}; use $CLAUDE_PROJECT_DIR")
 
 
 def _check_skills(root: Path, layout: str, rep: Report) -> None:
@@ -660,7 +756,7 @@ def validate_instance(root: Path) -> Report:
     for qid, ans in answers.items():
         q = questions.get(qid)
         if q is None:
-            rep.error(f"answer {qid!r} matches no setup question of the template")
+            rep.info(f"answer {qid!r} is kept for a version that asks it (none in {version})")
             continue
         if not _answer_fits(q, ans):
             rep.error(f"answer {qid!r} does not fit a {q.get('type')} question")
@@ -714,6 +810,9 @@ def main(argv: list[str]) -> int:
     except FormatTooNew as exc:
         print(f"error: {exc}")
         return 3
+    except FormatTooOld as exc:
+        print(f"error: {exc}")
+        return 1
     rep.print()
     if rep.errors:
         print(f"{len(rep.errors)} error(s), {len(rep.warnings)} warning(s)")

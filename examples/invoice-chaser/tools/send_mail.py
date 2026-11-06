@@ -9,10 +9,13 @@ the token file; a real agent would call the Gmail API here.
 """
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
-TOKEN = Path(__file__).resolve().parent.parent / ".secrets" / "gmail-token.json"
+# GMAIL_TOKEN_FILE is set by the host from x-agent8.env; the fallback works when the template
+# is run by hand from its own folder.
+TOKEN = Path(os.environ.get("GMAIL_TOKEN_FILE") or Path(__file__).resolve().parent.parent / ".secrets" / "gmail-token.json")
 
 
 def main() -> int:

@@ -42,6 +42,6 @@ x-agent8:
       - name: claude-code
       - name: codex
         support: partial
-        note: Reads AGENTS.md and the skills; the hooks (status, raw guard, lint) don't run, so the memory rules are advice only.
+        note: Reads AGENTS.md and the skills; the Claude Code hooks (status, raw guard, lint) are not translated to Codex, so the memory rules are advice only.
     tools: ["git", "python3>=3.9"]
     logins: [claude]

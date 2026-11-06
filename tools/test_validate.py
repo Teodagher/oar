@@ -165,7 +165,9 @@ class TestTemplate(Tmp):
         self.assertNotIn("STRIPE_KEY", text)
 
     def test_secret_file_target_must_stay_inside(self):
-        for bad in ("../outside.json", "/etc/token", "~/.config/x.json", ".agent8/t.json", ".mcp.json"):
+        for bad in ("../outside.json", "/etc/token", "~/.config/x.json", ".agent8/t.json", ".mcp.json",
+                    "./.agent8/instance.yaml", ".claude/settings.local.json", "skills/evil/SKILL.md",
+                    ".git/config", "t.json", "a//b.json"):
             with self.subTest(bad=bad):
                 self.template(MINIMAL + f"""\
   secrets:
@@ -177,7 +179,76 @@ class TestTemplate(Tmp):
 """)
                 self.write("t.json", "{{vault:G}}")
                 rep = v.validate_template(self.dir)
-                self.assertTrue(rep.errors, bad)
+                self.assertTrue(any("file target" in e or "files/0/path" in e for e in rep.errors), bad)
+
+    def test_good_secret_file_target(self):
+        self.template(MINIMAL + """\
+  secrets:
+    - item: G
+      description: mail
+      files:
+        - path: .secrets/token.json
+          template: t.json
+          agent_writes: true
+""")
+        self.write("t.json", "{{vault:G}}")
+        self.assertEqual(v.validate_template(self.dir).errors, [])
+
+    def test_secret_env_with_text_and_plain_env(self):
+        self.template(MINIMAL + """\
+  setup:
+    - {id: lang, prompt: Language, type: string}
+  env:
+    CONFIG_DIR: "{{folder}}/.secrets"
+    LANG_PREF: "{{answer:lang}}"
+    BAD_ANSWER: "{{answer:ghost}}"
+    LEAK: "{{vault:Api.token}}"
+  secrets:
+    - item: Api
+      description: api
+      env:
+        AUTH_HEADER: "Bearer {{vault:Api.token}}"
+        PLAIN: "no placeholder"
+""")
+        self.write(".mcp.json", '{"mcpServers": {"a": {"command": "npx", "env": {"D": "${CONFIG_DIR}", "H": "${AUTH_HEADER}"}}}}')
+        text = errors_of(v.validate_template(self.dir))
+        self.assertIn("answer:ghost", text)
+        self.assertIn("LEAK", text)
+        self.assertIn("PLAIN", text)
+        self.assertNotIn("AUTH_HEADER", text)
+        self.assertNotIn("CONFIG_DIR", text)
+
+    def test_repos(self):
+        self.template(MINIMAL + """\
+  repos:
+    - {path: memory/brain, url: https://example.com/brain}
+    - {path: code, url: https://example.com/code}
+""")
+        text = errors_of(v.validate_template(self.dir))
+        self.assertIn("repos 'code': must match the data list", text)
+        self.assertNotIn("memory/brain", text)
+
+    def test_nested_git_and_absolute_symlink(self):
+        self.template()
+        self.write("vendor/x/.git/HEAD", "ref\n")
+        self.write("docs/a.md")
+        os.symlink(str(self.dir / "docs/a.md"), self.dir / "abs-link")
+        text = errors_of(v.validate_template(self.dir))
+        self.assertIn("nested git repository", text)
+        self.assertIn("symlink is absolute", text)
+
+    def test_absolute_paths_in_hooks_and_mcp(self):
+        self.template()
+        self.write(".claude/settings.json", '{"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "python3 /home/teo/agent/tools/x.py"}]}]}}')
+        self.write(".mcp.json", '{"mcpServers": {"a": {"command": "/usr/local/bin/srv"}}}')
+        text = errors_of(v.validate_template(self.dir))
+        self.assertIn("hook Stop: absolute path", text)
+        self.assertIn("a.command: absolute path", text)
+
+    def test_skills_layout_detected(self):
+        self.template()
+        self.write(".claude/skills/x/SKILL.md", "---\nname: y\ndescription: d\n---\n")
+        self.assertIn("frontmatter name 'y'", errors_of(v.validate_template(self.dir)))
 
     def test_mcp_rules(self):
         self.template(MINIMAL + """\
@@ -225,9 +296,10 @@ class TestTemplate(Tmp):
         with self.assertRaises(v.FormatTooNew):
             v.validate_template(self.dir)
 
-    def test_older_minor_accepted(self):
+    def test_older_minor_refused_while_0x(self):
         self.template(MINIMAL.replace('"0.2"', '"0.1"'))
-        self.assertEqual(v.validate_template(self.dir).errors, [])
+        with self.assertRaises(v.FormatTooOld):
+            v.validate_template(self.dir)
 
     def test_plain_opengap_repo(self):
         self.write("agent.yaml", "name: og\nversion: 0.1.0\ndescription: d\n")
@@ -269,8 +341,9 @@ class TestInstance(Tmp):
     def test_answers_checked(self):
         self.make_copy()
         r = self.record()
-        r.write_text(r.read_text().replace("  owner_name: Sam\n", "").replace("interview: true", "interview: maybe"))
+        r.write_text(r.read_text().replace("  owner_name: Sam\n", "  later_question: kept\n").replace("interview: true", "interview: maybe"))
         text = errors_of(v.validate_instance(self.dir))
+        self.assertNotIn("later_question", text)  # kept for a rollback, not an error
         self.assertIn("required setup question 'owner_name'", text)
         self.assertIn("answer 'interview' does not fit", text)
 

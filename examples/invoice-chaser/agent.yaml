@@ -35,6 +35,10 @@ x-agent8:
       prompt: Copy you on every reminder?
       type: boolean
       default: true
+  env:
+    # Plain (non-secret) variables. The token file's location, so the script needn't guess.
+    GMAIL_TOKEN_FILE: "{{folder}}/.secrets/gmail-token.json"
+    REMINDER_TONE: "{{answer:tone}}"
   secrets:
     - item: Stripe
       description: Reads invoices and their payment status
@@ -48,6 +52,8 @@ x-agent8:
       files:
         - path: .secrets/gmail-token.json
           template: secret-templates/gmail-token.json
+          # The agent refreshes the token and rewrites the file itself.
+          agent_writes: true
   requires:
     harnesses:
       - name: claude-code

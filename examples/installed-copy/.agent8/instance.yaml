@@ -2,7 +2,7 @@ format: "0.2"
 template:
   source: https://github.com/Teodagher/teo-agent-boilerplate
   version: 0.2.0
-  digest: sha256:285f90615638c5c96baf587156e7e84b3d70ecffad344be59fce4821558ad5c9
+  digest: sha256:8698adac009185dc65499659ec23c31dfd7a7e8bdd34add6db01da8623fbad18
   commit: 0eb0f71
 installed_at: 2026-11-06T15:00:00Z
 updated_at: 2026-11-06T15:00:00Z

@@ -8,10 +8,11 @@ What `teo-memory-agent` 0.2.0 looks like once installed for Sam (SPEC §9). Kept
 - `agent.yaml`: the copy's own manifest, `extends: …@0.2.0`;
 - the own layer: `identity.md` (seeded, with Sam's setup answers filled in), `LOCAL.md`;
 - data: `memory/`, seeded once from the template's `seed/`;
-- `CLAUDE.md`, one of the host-owned files.
+- `CLAUDE.md`, one of the host-owned files: it imports the template's instructions, then the own layer.
 
 Left out because the host regenerates them on every install and update: `AGENTS.md`,
 `.claude/skills/`, `.agents/skills/`, `.claude/settings.json`, `.mcp.json` and the mirrored
-template files (`tools/`, `templates/`, `.claude/rules/`).
+template files (`tools/`, `templates/`, `.claude/rules/`), which the host writes as read-only
+copies.
 
 Check it with `python3 ../../tools/validate.py instance .`

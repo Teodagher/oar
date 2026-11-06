@@ -4,25 +4,77 @@
   "title": "agent.yaml (OpenGAP manifest + x-agent8 block), format 0.2",
   "description": "A template's or a copy's agent.yaml. OpenGAP keys are checked loosely and passed through; the x-agent8 block is checked strictly. A template has no `extends` and MUST list `data`; a copy has `extends: <source>@<exact version>`.",
   "type": "object",
-  "required": ["name", "version", "description", "x-agent8"],
+  "required": [
+    "name",
+    "version",
+    "description",
+    "x-agent8"
+  ],
   "properties": {
-    "spec_version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$", "description": "OpenGAP spec version this file also follows" },
-    "name": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$", "maxLength": 64 },
-    "version": { "$ref": "#/$defs/semver" },
-    "description": { "type": "string", "minLength": 1 },
-    "author": { "type": "string" },
-    "license": { "type": "string" },
-    "tags": { "type": "array", "items": { "type": "string" } },
+    "spec_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "OpenGAP spec version this file also follows"
+    },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "maxLength": 64
+    },
+    "version": {
+      "$ref": "#/$defs/semver"
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1
+    },
+    "author": {
+      "type": "string"
+    },
+    "license": {
+      "type": "string"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
     "metadata": {
       "type": "object",
-      "additionalProperties": { "type": ["string", "number", "boolean"] }
+      "additionalProperties": {
+        "type": [
+          "string",
+          "number",
+          "boolean"
+        ]
+      }
     },
-    "extends": { "$ref": "#/$defs/extends" },
-    "x-agent8": { "$ref": "#/$defs/block" }
+    "extends": {
+      "$ref": "#/$defs/extends"
+    },
+    "x-agent8": {
+      "$ref": "#/$defs/block"
+    }
   },
   "additionalProperties": true,
-  "if": { "not": { "required": ["extends"] } },
-  "then": { "properties": { "x-agent8": { "required": ["format", "data"] } } },
+  "if": {
+    "not": {
+      "required": [
+        "extends"
+      ]
+    }
+  },
+  "then": {
+    "properties": {
+      "x-agent8": {
+        "required": [
+          "format",
+          "data"
+        ]
+      }
+    }
+  },
   "$defs": {
     "semver": {
       "type": "string",
@@ -42,79 +94,309 @@
       "type": "string",
       "description": "One anchored gitignore pattern: starts with /, **/, !/ or !**/; no comments, no spaces at either end.",
       "pattern": "^!?(/|\\*\\*/)[^\\s#](.*\\S)?$",
-      "not": { "pattern": "\\s#" }
+      "not": {
+        "pattern": "\\s#"
+      }
     },
-    "envName": { "type": "string", "pattern": "^[A-Z_][A-Z0-9_]*$" },
-    "itemName": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$" },
+    "envName": {
+      "type": "string",
+      "pattern": "^[A-Z_][A-Z0-9_]*$"
+    },
+    "itemName": {
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+    },
     "relPath": {
       "type": "string",
       "minLength": 1,
-      "not": { "pattern": "(^/|^~|(^|/)\\.\\.(/|$)|\\\\)" }
+      "description": "Relative, normalised, inside the agent's folder (no ./, .., ~, leading /, backslash, empty segment).",
+      "not": {
+        "pattern": "(^/|^~|(^|/)\\.{1,2}(/|$)|\\\\|//|/$)"
+      }
     },
     "block": {
       "type": "object",
-      "required": ["format"],
+      "required": [
+        "format"
+      ],
       "additionalProperties": false,
       "properties": {
-        "format": { "$ref": "#/$defs/format" },
+        "format": {
+          "$ref": "#/$defs/format"
+        },
         "layout": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "skills": { "enum": ["skills", ".agents/skills", ".claude/skills"], "default": "skills" }
+            "skills": {
+              "enum": [
+                "skills",
+                ".agents/skills",
+                ".claude/skills"
+              ],
+              "default": "skills"
+            }
           }
         },
-        "data": { "type": "array", "items": { "$ref": "#/$defs/dataPattern" }, "uniqueItems": true },
-        "setup": { "type": "array", "items": { "$ref": "#/$defs/question" } },
-        "secrets": { "type": "array", "items": { "$ref": "#/$defs/secret" } },
-        "requires": { "$ref": "#/$defs/requires" }
+        "data": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/dataPattern"
+          },
+          "uniqueItems": true
+        },
+        "setup": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/question"
+          }
+        },
+        "secrets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/secret"
+          }
+        },
+        "requires": {
+          "$ref": "#/$defs/requires"
+        },
+        "env": {
+          "type": "object",
+          "description": "Plain variables: text with optional {{answer:<id>}} and {{folder}}. No secrets.",
+          "propertyNames": {
+            "$ref": "#/$defs/envName"
+          },
+          "additionalProperties": {
+            "type": "string",
+            "not": {
+              "pattern": "\\{\\{\\s*vault:"
+            }
+          }
+        },
+        "repos": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "path",
+              "url"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "path": {
+                "$ref": "#/$defs/relPath"
+              },
+              "url": {
+                "type": "string",
+                "minLength": 1
+              },
+              "ref": {
+                "type": "string",
+                "minLength": 1
+              },
+              "required": {
+                "type": "boolean",
+                "default": true
+              }
+            }
+          }
+        }
       }
     },
     "question": {
       "type": "object",
-      "required": ["id", "prompt", "type"],
+      "required": [
+        "id",
+        "prompt",
+        "type"
+      ],
       "additionalProperties": false,
       "properties": {
-        "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
-        "prompt": { "type": "string", "minLength": 1 },
-        "type": { "enum": ["string", "text", "choice", "multi", "boolean", "number"] },
-        "choices": { "type": "array", "items": { "type": "string" }, "minItems": 1, "uniqueItems": true },
-        "required": { "type": "boolean" },
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "prompt": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "enum": [
+            "string",
+            "text",
+            "choice",
+            "multi",
+            "boolean",
+            "number"
+          ]
+        },
+        "choices": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "required": {
+          "type": "boolean"
+        },
         "default": {},
-        "help": { "type": "string" }
+        "help": {
+          "type": "string"
+        }
       },
       "allOf": [
-        { "if": { "properties": { "type": { "enum": ["choice", "multi"] } } }, "then": { "required": ["choices"] } },
-        { "if": { "properties": { "type": { "const": "boolean" } } }, "then": { "properties": { "default": { "type": "boolean" } } } },
-        { "if": { "properties": { "type": { "const": "number" } } }, "then": { "properties": { "default": { "type": "number" } } } },
-        { "if": { "properties": { "type": { "enum": ["string", "text", "choice"] } } }, "then": { "properties": { "default": { "type": "string" } } } },
-        { "if": { "properties": { "type": { "const": "multi" } } }, "then": { "properties": { "default": { "type": "array", "items": { "type": "string" } } } } }
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "choice",
+                  "multi"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "choices"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "boolean"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "default": {
+                "type": "boolean"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "number"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "default": {
+                "type": "number"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "string",
+                  "text",
+                  "choice"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "default": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "multi"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "default": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
       ]
     },
     "secret": {
       "type": "object",
-      "required": ["item", "description"],
+      "required": [
+        "item",
+        "description"
+      ],
       "additionalProperties": false,
       "properties": {
-        "item": { "$ref": "#/$defs/itemName" },
-        "description": { "type": "string", "minLength": 1 },
-        "fields": { "type": "array", "items": { "type": "string", "pattern": "^[A-Za-z0-9_-]+$" }, "uniqueItems": true },
-        "required": { "type": "boolean", "default": true },
-        "how_to_get": { "type": "string" },
+        "item": {
+          "$ref": "#/$defs/itemName"
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$"
+          },
+          "uniqueItems": true
+        },
+        "required": {
+          "type": "boolean",
+          "default": true
+        },
+        "how_to_get": {
+          "type": "string"
+        },
         "env": {
           "type": "object",
-          "propertyNames": { "$ref": "#/$defs/envName" },
-          "additionalProperties": { "type": "string", "pattern": "^\\{\\{vault:[A-Za-z][A-Za-z0-9_-]{0,63}(\\.[A-Za-z0-9_-]+)?\\}\\}$" }
+          "propertyNames": {
+            "$ref": "#/$defs/envName"
+          },
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "\\{\\{vault:[A-Za-z][A-Za-z0-9_-]{0,63}(\\.[A-Za-z0-9_-]+)?\\}\\}"
+          }
         },
         "files": {
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["path", "template"],
+            "required": [
+              "path",
+              "template"
+            ],
             "additionalProperties": false,
             "properties": {
-              "path": { "$ref": "#/$defs/relPath" },
-              "template": { "$ref": "#/$defs/relPath" }
+              "path": {
+                "$ref": "#/$defs/relPath"
+              },
+              "template": {
+                "$ref": "#/$defs/relPath"
+              },
+              "agent_writes": {
+                "type": "boolean",
+                "default": false
+              }
             }
           }
         }
@@ -128,19 +410,55 @@
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["name"],
+            "required": [
+              "name"
+            ],
             "additionalProperties": false,
             "properties": {
-              "name": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
-              "support": { "enum": ["full", "partial"] },
-              "note": { "type": "string" }
+              "name": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]*$"
+              },
+              "support": {
+                "enum": [
+                  "full",
+                  "partial"
+                ]
+              },
+              "note": {
+                "type": "string"
+              }
             }
           }
         },
-        "tools": { "type": "array", "items": { "type": "string", "pattern": "^[A-Za-z0-9_.+-]+((>=|==)[0-9][0-9A-Za-z.]*)?$" } },
-        "logins": { "type": "array", "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" } },
-        "plugins": { "type": "array", "items": { "type": "string", "pattern": "^[^@\\s]+@[^@\\s]+$" } },
-        "skills": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+        "tools": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.+-]+((>=|==)[0-9][0-9A-Za-z.]*)?$"
+          }
+        },
+        "logins": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*$"
+          }
+        },
+        "plugins": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[^@\\s]+@[^@\\s]+$"
+          }
+        },
+        "skills": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
       }
     }
   }
