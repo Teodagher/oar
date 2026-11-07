@@ -7,6 +7,10 @@
   agentfmt install SOURCE [DEST] [--version V] [--answer id=value]... [--yes]
                                              install a template as a new agent: the template
                                              read-only, plus the copy's own layer
+  agentfmt import SOURCE [OUT] [--version V]
+                                             write an OpenGAP repo without the x-agent8 block, or
+                                             a plain AGENTS.md/CLAUDE.md repo, out as a template
+                                             (SPEC §12; `install` reads such repos the same way)
   agentfmt update [DIR] [--to V] [--answer id=value]... [--dry-run] [--yes]
                                              switch an installed copy to another version
                                              (up or back); never a merge
@@ -43,6 +47,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import validate as v  # noqa: E402  (the format's rules live in one place)
 import claude_plugin  # noqa: E402  (SPEC §11, shared with agent8's server)
+import importer  # noqa: E402  (SPEC §12: OpenGAP and plain repos, same reading as agent8's)
 
 TOOL = "agentfmt"           # placeholder name: rename here once the format has one
 TOOL_VERSION = "0.1.0"
@@ -528,16 +533,11 @@ class Source:
         pool = final or versions
         return max(pool, key=semver_key) if pool else None
 
-    def files_at(self, version: str | None):
-        """(files, version, commit) of one version. Without a version: the latest
-        release tag, or the latest commit when the repository has no tags."""
+    def raw_at(self, version: str | None):
+        """(files, tag, commit) of one version, without reading its manifest. Without a
+        version: the latest release tag, or the latest commit when there are no tags."""
         if self.folder:
-            files = check_entries(read_folder(self.folder))
-            ver = manifest_of(files).get("version")
-            if version and version != ver:
-                raise Refused(f"{self.given} is a plain folder holding version {ver}; "
-                              f"it has no version {version}.")
-            return files, ver, None
+            return check_entries(read_folder(self.folder)), None, None
         tags = self.tags()
         if version:
             if version not in tags:
@@ -548,7 +548,20 @@ class Source:
             ref = tags[version] if version else "HEAD"
         commit = git(["rev-parse", "--verify", "--quiet", ref + "^{commit}"],
                      cwd=self.repo).decode().strip()
-        files = check_entries(self._tree(commit))
+        return check_entries(self._tree(commit)), (None if ref == "HEAD" else ref), commit
+
+    def files_at(self, version: str | None):
+        """(files, version, commit) of one version. Without a version: the latest
+        release tag, or the latest commit when the repository has no tags."""
+        if self.folder:
+            files = check_entries(read_folder(self.folder))
+            ver = manifest_of(files).get("version")
+            if version and version != ver:
+                raise Refused(f"{self.given} is a plain folder holding version {ver}; "
+                              f"it has no version {version}.")
+            return files, ver, None
+        files, ref, commit = self.raw_at(version)
+        version = TAG_RE.match(ref).group(1) if ref else None
         man_ver = manifest_of(files).get("version")
         if version and man_ver != version:
             raise Refused(f"Tag {ref} holds version {man_ver!r} in its agent.yaml, not {version}.")
@@ -614,6 +627,82 @@ def manifest_of(files: dict) -> dict:
     if not isinstance(man, dict):
         raise Refused("agent.yaml must be a mapping.")
     return man
+
+
+# ---------------------------------------------------------------- repositories that aren't templates yet
+
+def yaml_reader(text: str):
+    """How importer.py reads YAML here (timestamps kept as text)."""
+    return v.yaml.load(text, Loader=v._Loader)
+
+
+def follow_extends(files: dict, own: str):
+    """The parents an OpenGAP `extends` leads to (direct parent first) and the `extends` that
+    wasn't followed, with the same rules as agent8's import: GitHub only, at most
+    importer.EXTENDS_DEPTH levels, never the same repository twice."""
+    parents, stop = [], None
+    me = importer.extends_github(source_url(own))
+    seen = {me["url"] if me else own}
+    nxt = importer.extends_of(files, yaml_reader)
+    while nxt is not None:
+        gh = importer.extends_github(nxt)
+        if not gh:
+            stop = {"url": nxt, "why": "only a GitHub repository is followed"}
+            break
+        if gh["url"] in seen:
+            stop = {"url": nxt, "why": "it leads back to a repository already read"}
+            break
+        if len(parents) >= importer.EXTENDS_DEPTH:
+            stop = {"url": nxt, "why": f"more than {importer.EXTENDS_DEPTH} levels"}
+            break
+        seen.add(gh["url"])
+        try:
+            with Source(gh["url"]) as ps:
+                pfiles, _ref, pcommit = ps.raw_at(None)
+        except Refused as exc:
+            stop = {"url": nxt, "why": f"couldn't fetch it: {str(exc).rstrip('.')}"}
+            break
+        parents.append({"url": gh["url"], "commit": pcommit or "", "files": pfiles})
+        nxt = importer.extends_of(pfiles, yaml_reader)
+    return parents, stop
+
+
+def imported(src: "Source", version: str | None):
+    """A repository that isn't a template (an OpenGAP repo without the block, or plain
+    AGENTS.md / CLAUDE.md) read as one (SPEC §12): (files, version, commit, conversion), or
+    None when it is a template already."""
+    files, ref, commit = src.raw_at(version)
+    man = importer.manifest_of(files, yaml_reader)
+    if man is not None and BLOCK in man:
+        return None
+    if man is None and ("agent.yaml" in files or "agent.yml" in files):
+        raise Refused("agent.yaml can't be read as a YAML mapping.")
+    parents, stop = follow_extends(files, src.given) if man is not None else ([], None)
+    name = re.sub(r"(\.git)?/*$", "", src.given).rsplit("/", 1)[-1].rsplit(":", 1)[-1]
+    url = source_url(src.given) if src.repo else src.name
+    owner = re.sub(r"(\.git)?/*$", "", url).split("/")
+    try:
+        c = importer.convert(files, {"url": url, "repo": name, "owner": owner[-2] if len(owner) > 4 else None,
+                                     "commit": commit or "", "ref": ref}, yaml_reader, parents, stop)
+    except importer.Refused as exc:
+        raise Refused(str(exc))
+    ver = c["version"] or "0.0.0"
+    man = dict(c["manifest"], version=ver)
+    out = dict(c["files"])
+    out["agent.yaml"] = file_entry(f"# agent.yaml — written by {TOOL} when this repository was read as a template "
+                                   "(it had no x-agent8 block).\n" + "\n".join(to_yaml(man)) + "\n")
+    c["manifest"] = man
+    return check_entries(out), ver, commit, c
+
+
+def print_import(c: dict) -> None:
+    i = c["info"]
+    out("It isn't a template yet: " + ("an OpenGAP agent without the x-agent8 block" if c["kind"] == "opengap"
+                                       else "no manifest (instructions and skills only)") + ".")
+    for n in i["notes"]:
+        out(f"note: {n}")
+    plain_list("Left out", [f"{x['path']}: {x['why']}" for x in i["left_out"]])
+    plain_list("Not carried over", i["unmapped"])
 
 
 def materialise(files: dict, root: str) -> None:
@@ -1308,7 +1397,12 @@ def cmd_install(args) -> int:
     if os.path.lexists(dest) and (not os.path.isdir(dest) or os.path.islink(dest) or os.listdir(dest)):
         raise Refused(f"{dest} already has files in it. Pick another folder.")
     with Source(args.source) as src:
-        files, version, commit = src.files_at(args.version)
+        conv = imported(src, args.version)
+        if conv:
+            files, version, commit, c = conv
+            print_import(c)
+        else:
+            files, version, commit = src.files_at(args.version)
         man = manifest_of(files)
         fmt = format_check(man)          # before anything is written
         rep = validate_files(files)
@@ -1370,6 +1464,32 @@ def cmd_install(args) -> int:
     plain_list("Start it with these environment variables", [f"{k}={val}" for k, val in plan["env"].items()])
     for n in plan["notes"]:
         out(f"note: {n}")
+    return 0
+
+
+def cmd_import(args) -> int:
+    """An OpenGAP or plain repository written out as a template (SPEC §12), for its author
+    to finish (add the x-agent8 block's setup questions and secrets, check, release)."""
+    dest = os.path.abspath(args.out or slug(re.sub(r"(\.git)?/*$", "", args.source).rsplit("/", 1)[-1]
+                                            .rsplit(":", 1)[-1]))
+    if os.path.lexists(dest) and (not os.path.isdir(dest) or os.path.islink(dest) or os.listdir(dest)):
+        raise Refused(f"{dest} already has files in it. Pick another folder.")
+    with Source(args.source) as src:
+        conv = imported(src, args.version)
+        if not conv:
+            raise Refused(f"{args.source} is a template already (its agent.yaml has the x-agent8 block): "
+                          f"use `{TOOL} install` or `{TOOL} check`.")
+        files, version, _commit, c = conv
+        print_import(c)
+        rep = validate_files(files)
+        os.makedirs(dest, exist_ok=True)
+        materialise({k: e for k, e in files.items()}, dest)
+    out(f"Wrote {c['manifest']['name']} {version} as a template in {dest}.")
+    for w in rep.warnings:
+        out(f"warning: {w}")
+    if rep.errors:
+        print_report(rep)
+        return 1
     return 0
 
 
@@ -1833,6 +1953,10 @@ def main(argv=None) -> int:
     i.add_argument("--answers", metavar="FILE", help="YAML file of answers")
     i.add_argument("--yes", action="store_true", help="don't ask before writing")
     i.add_argument("--now", help=argparse.SUPPRESS)
+    m = sub.add_parser("import", help="write an OpenGAP or plain AGENTS.md repo out as a template")
+    m.add_argument("source")
+    m.add_argument("out", nargs="?", help="the folder to write (default: the repository's name)")
+    m.add_argument("--version", dest="version", help="exact version (default: the latest release tag)")
     u = sub.add_parser("update", help="switch an installed copy to another version")
     u.add_argument("dir", nargs="?", default=".")
     u.add_argument("--to", help="exact version, higher or lower (default: the latest release tag)")
@@ -1856,10 +1980,10 @@ def main(argv=None) -> int:
             if args.version and not SEMVER_RE.match(args.version):
                 raise Refused("--version must be an exact version, like 1.2.0.")
             return cmd_plugin(args)
-        if args.cmd == "install":
+        if args.cmd in ("install", "import"):
             if args.version and not SEMVER_RE.match(args.version):
                 raise Refused("--version must be an exact version, like 1.2.0.")
-            return cmd_install(args)
+            return cmd_install(args) if args.cmd == "install" else cmd_import(args)
         if args.to and not SEMVER_RE.match(args.to):
             raise Refused("--to must be an exact version, like 1.2.0.")
         return cmd_update(args)

@@ -566,18 +566,34 @@ The plugin is read-only and updated as a whole, like a template version.
 
 ## 12. Reading OpenGAP repos without the block
 
-A host SHOULD import an OpenGAP repo that has no `x-agent8` block, as an unverified template:
+A host SHOULD import an OpenGAP repo that has no `x-agent8` block, as an unverified template.
+The reference reading is `tools/importer.py` (`agentfmt import` and `agentfmt install` use it);
+agent8 reads the same way, and a test holds the two to the same result.
 
-- **Instructions:** `SOUL.md`, then `RULES.md`, then `AGENTS.md`, concatenated in that order
-  into the template's instructions.
-- **Data:** `/memory/`, `/knowledge/` and `/.gitagent/` (the ticket's rule: memory and
-  knowledge are the original agent's, not the template's), plus the format's implicit data.
-  They are stripped before the version is stored.
-- **Skills:** `skills/`. **Tools and hooks:** `tools/`, `hooks/` are kept as code.
-- **`extends`:** the parent is fetched and flattened (OpenGAP's resolution rules), and the
-  result is stored as one version.
-- `setup` and `secrets` are empty; the author can add the block later.
-- `compliance`, `model`, `runtime` and `agents` are kept in the file and ignored.
+- **`extends`:** the parent is fetched and flattened with OpenGAP's own rules (§15 of its
+  spec): manifests deep-merged with the child winning, the child's `SOUL.md` replacing the
+  parent's, `RULES.md` parent then child, `skills/` and `tools/` united with the child's entry
+  winning by name; `memory/` and the parent's other files are not inherited. At most three
+  levels; GitHub repositories only for now. An `extends` that isn't followed is said.
+- **Instructions:** `SOUL.md`, `RULES.md`, `DUTIES.md`, then `AGENTS.md` and `CLAUDE.md`'s own
+  words, concatenated in that order, then sections written from the rest: `compliance` as
+  rules in words, `knowledge/` (what `knowledge/index.yaml` says to read first, then the
+  others), `tools/*.yaml` as scripts the agent runs itself, sub-agents (`agents` and
+  `agents/`), `workflows/`, and where to keep memory.
+- **Data:** `/memory/` and `/.gitagent/` (the original agent's) are left out; `/knowledge/`
+  is data too, but its files are the agent's reference documents, so they are shipped as
+  seeds (`seed/knowledge/…`): every copy starts with them and owns them. Plus the usual
+  data folders and files of keys.
+- **Skills:** `skills/` (or `.agents/skills`, `.claude/skills`). `tools/`, `hooks/`,
+  `workflows/`, `agents/`, `config/` are kept as files.
+- **`mcp_servers`** becomes `.mcp.json` (unless the repo has one); a server with a variable or
+  an absolute path on its command line is left out. Each `${NAME}` of `.mcp.json` and each
+  key-like name in `.env.example` is declared as a secret (`required: false`) given at launch.
+- `setup` is empty; the author can add the block later.
+- Kept in `agent.yaml` but not acted on, and said so on import: `model`, `runtime`,
+  `hooks/hooks.yaml`, `dependencies`, `delegation`, `a2a`, `registries`, `config/`,
+  `compliance` (written as rules, not enforced), `tools/` (not registered as tools).
+- Refused: no `SOUL.md`, `RULES.md`, `AGENTS.md` or `CLAUDE.md`; a key in `agent.yaml`.
 
 ## 13. Conformance
 

@@ -11,10 +11,12 @@ Skills and Claude Code plugins.
 | [`schema/`](schema/) | JSON Schemas for `agent.yaml` and `.agent8/instance.yaml` |
 | [`examples/`](examples/) | `teo-memory-agent` (modelled on Teo's boilerplate), `invoice-chaser` (secrets, MCP), `installed-copy` |
 | [`tools/validate.py`](tools/validate.py) | validator: `python3 tools/validate.py template <dir>` or `instance <dir>` |
-| [`tools/agentfmt.py`](tools/agentfmt.py) | reference command line: `check`, `new`, `install`, `update`, `plugin` (below) |
+| [`tools/agentfmt.py`](tools/agentfmt.py) | reference command line: `check`, `new`, `install`, `import`, `update`, `plugin` (below) |
+| [`tools/importer.py`](tools/importer.py) | reference reading of OpenGAP repos without the block and plain AGENTS.md repos (SPEC §12) |
 | [`rfcs/`](rfcs/) | draft RFC for OpenGAP (not submitted) |
 
-Tests: `python3 -m unittest discover -s tools` (needs PyYAML, jsonschema and git).
+Tests: `python3 -m unittest discover -s tools` (needs PyYAML, jsonschema and git; with Node 22
+next to agent8's code, `test_importer.py` also checks agent8 reads OpenGAP repos the same way).
 
 ## The reference command line
 
@@ -33,6 +35,11 @@ agentfmt install https://github.com/sam/my-agent sams-agent --answer owner_name=
                                             # the copy's own layer beside it, data seeded once
 agentfmt update sams-agent --dry-run        # what switching to the latest version would change
 agentfmt update sams-agent --to 1.1.0       # switch version, up or back; never a merge
+agentfmt import https://github.com/sam/opengap-agent my-template
+                                            # an OpenGAP repo without the x-agent8 block (or a
+                                            # plain AGENTS.md repo) written out as a template
+                                            # (SPEC §12), with what wasn't carried over; install
+                                            # reads such repos the same way
 agentfmt plugin https://github.com/sam/my-agent --zip my-agent.zip
                                             # the same template as a Claude Code plugin (with a
                                             # one-plugin marketplace): /plugin marketplace add,
