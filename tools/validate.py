@@ -66,6 +66,20 @@ SECRET_CONTENT_RES = [
     re.compile(r"\bxox[abprs]-[0-9A-Za-z-]{10,}"),
     re.compile(r"\bAIza[0-9A-Za-z_-]{35}\b"),
     re.compile(r"\bsk-[0-9A-Za-z]{32,}"),
+    # Added with T-142 (the helper's list and the board's template_looks_secret, 0071).
+    re.compile(r"\bgh[osu]_[0-9A-Za-z]{30,}"),
+    re.compile(r"\brk_live_[0-9A-Za-z]{16,}"),
+    re.compile(r"-----BEGIN PGP PRIVATE KEY BLOCK-----"),
+    re.compile(r"\bsk-(?:or-v1|svcacct|admin)-[0-9A-Za-z_-]{20,}"),
+    re.compile(r"\b[sr]k_test_[0-9A-Za-z]{16,}"),
+    re.compile(r"\bglpat-[0-9A-Za-z_-]{20,}"),
+    re.compile(r"\bnpm_[0-9A-Za-z]{36}\b"),
+    re.compile(r"\bhf_[0-9A-Za-z]{30,}"),
+    re.compile(r"\bGOCSPX-[0-9A-Za-z_-]{20,}"),
+    re.compile(r"\bya29\.[0-9A-Za-z_-]{20,}"),
+    re.compile(r"\bxapp-[0-9A-Za-z-]{20,}"),
+    re.compile(r"\bSG\.[0-9A-Za-z_-]{16,}\.[0-9A-Za-z_-]{16,}"),
+    re.compile(r"\bASIA[0-9A-Z]{16}\b"),
 ]
 
 
