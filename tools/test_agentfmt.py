@@ -557,6 +557,73 @@ def load_helper():
     return module
 
 
+class TestPlugin(Tmp):
+    """`plugin`: a template as a Claude Code plugin (SPEC §11). agent8's server runs the same
+    mapping (backend/share/plugin.ts); its own test checks both give the same bytes."""
+
+    def test_tiny_template(self):
+        src = self.tmp / "tiny"
+        self.write_tree(src, tiny(extra="  secrets:\n    - item: Notion\n      description: Pages it reads\n"
+                                        "      env:\n        NOTION_TOKEN: \"{{vault:Notion.token}}\"\n"))
+        self.write_tree(src, {".mcp.json": json.dumps({"mcpServers": {"notion": {
+            "command": "node", "args": ["${CLAUDE_PROJECT_DIR}/tools/run.py"], "env": {"T": "${NOTION_TOKEN}"}}}})})
+        code, said = run_cli("plugin", src, self.tmp / "out")
+        self.assertEqual(code, 0, said)
+        got = tree(self.tmp / "out")
+        self.assertEqual(sorted(got), sorted([
+            ".claude-plugin/marketplace.json", ".claude-plugin/plugin.json", ".mcp.json", "LICENSE", "README.md",
+            "skills/remember/SKILL.md", "skills/tiny/SKILL.md", "tools/run.py"]))
+        pj = json.loads(got[".claude-plugin/plugin.json"])
+        self.assertEqual(pj["userConfig"]["NOTION_TOKEN"]["sensitive"], True)
+        self.assertEqual(pj["userConfig"]["owner_name"]["required"], True)
+        mcp = json.loads(got[".mcp.json"])["mcpServers"]["notion"]
+        self.assertEqual(mcp["env"]["T"], "${user_config.NOTION_TOKEN}")
+        self.assertEqual(mcp["args"], ["${CLAUDE_PLUGIN_ROOT}/tools/run.py"])
+        mk = json.loads(got[".claude-plugin/marketplace.json"])
+        self.assertEqual(mk["plugins"], [{"name": "tiny", "source": "./", "description": "A tiny agent"}])
+        self.assertTrue(os.access(self.tmp / "out" / "tools" / "run.py", os.X_OK))
+        readme = got["README.md"].decode()
+        self.assertIn("`${NOTION_TOKEN}`", readme)
+        self.assertIn("`seed/memory/now.md`: starting content", readme)
+        # Never over an existing folder.
+        code, said = run_cli("plugin", src, self.tmp / "out")
+        self.assertEqual(code, 1)
+        self.assertIn("already has files", said)
+
+    def test_zip_and_git_versions(self):
+        root = self.repo(tiny())
+        self.release(root, tiny(version="1.1.0"), "v1.1.0")
+        z = self.tmp / "tiny.zip"
+        code, said = run_cli("plugin", root, "--version", "1.0.0", "--zip", z)
+        self.assertEqual(code, 0, said)
+        import zipfile
+        with zipfile.ZipFile(z) as zf:
+            self.assertIsNone(zf.testzip())
+            self.assertIn("tiny/.claude-plugin/plugin.json", zf.namelist())
+            self.assertEqual(json.loads(zf.read("tiny/.claude-plugin/plugin.json"))["version"], "1.0.0")
+            self.assertEqual(zf.getinfo("tiny/tools/run.py").external_attr >> 16, 0o100755)
+
+    def test_secret_in_a_file_refuses(self):
+        src = self.tmp / "keyed"
+        files = tiny()
+        files["tools/run.py"] = "KEY = 'ghp_" + "a" * 36 + "'\n"
+        self.write_tree(src, files)
+        code, said = run_cli("plugin", src, self.tmp / "out")
+        self.assertEqual(code, 1)
+        self.assertFalse((self.tmp / "out").exists())
+
+    def test_examples_and_claude_code(self):
+        """The examples export; when Claude Code is installed, it accepts them."""
+        for ex in ("invoice-chaser", "teo-memory-agent"):
+            out = self.tmp / ex
+            code, said = run_cli("plugin", EXAMPLES / ex, out)
+            self.assertEqual(code, 0, said)
+            if shutil.which("claude"):
+                r = subprocess.run(["claude", "plugin", "validate", str(out)], capture_output=True, text=True,
+                                   timeout=120)
+                self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+
 @unittest.skipUnless(HELPER.is_file(), "agent8's helper isn't next to the spec")
 class TestAgreesWithAgent8(unittest.TestCase):
     """The same template and answers give the same files as agent8's installer, apart from

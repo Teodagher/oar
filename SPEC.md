@@ -526,21 +526,41 @@ next switch; a host SHOULD warn about it.
 
 ## 11. Claude Code plugin export
 
-A template can be packaged as a Claude Code plugin, for people who want its capabilities in
-an agent they already have:
+A template can be packaged as a [Claude Code plugin](https://code.claude.com/docs/en/plugins-reference),
+for people who want its capabilities in an agent they already have. The export is one folder
+holding the plugin and a one-plugin marketplace beside it (`.claude-plugin/plugin.json` and
+`.claude-plugin/marketplace.json`, the entry's `source` being `"./"`), so it installs with
+`/plugin marketplace add ./<folder>` then `/plugin install <name>@agent8-<name>`.
+[`tools/agentfmt.py plugin`](tools/agentfmt.py) is the reference (`tools/claude_plugin.py`).
 
 | Template | Plugin |
 |---|---|
-| `name`, `version`, `description`, `author`, `license` | `.claude-plugin/plugin.json` same fields (`author` → `{name}`) |
-| skills | `skills/` |
-| `.claude/agents/*.md` | `agents/` |
-| `.claude/settings.json` hooks | `hooks/hooks.json`, `$CLAUDE_PROJECT_DIR/<template path>` rewritten to `${CLAUDE_PLUGIN_ROOT}/<template path>` |
-| `.mcp.json` | `.mcp.json`; each `${NAME}` from a secret becomes `${user_config.<name>}` |
-| secrets | `userConfig` entries with `sensitive: true` |
-| non-secret setup questions | `userConfig` entries (`string`, `number`, `boolean`; `choice` → `options`; `text` → `string`; `multi` → `string` with `multiple: true`) |
-| `AGENTS.md` | a skill named after the agent (plugins don't load a `CLAUDE.md`) |
-| code under `tools/` etc. | copied as-is |
-| data list, seeds, own layer | **not exported**: a plugin has no data and no identity |
+| `name`, `version`, `description`, `author`, `license`, `tags` | `.claude-plugin/plugin.json` `name`, `version`, `description`, `author: {name}`, `license`, `keywords`. A name Claude Code reserves (`claude-…`, `anthropic-…`, `claude`…) gets `agent-` in front |
+| skills (the `layout` folder) | `skills/<name>/`, whole folders |
+| `AGENTS.md`, then each `.claude/rules/*.md` | one skill named after the plugin (`<name>-instructions` if a skill has that name): plugins don't load a `CLAUDE.md` or rules. It ends with the setup answers as `${user_config.<id>}` |
+| `.claude/agents/**/*.md` | `agents/**` as-is (plugins ignore `permissionMode`, `hooks`, `mcpServers`, `initialPrompt` there; the README lists them) |
+| `.claude/commands/**/*.md` | `commands/**` |
+| `.claude/settings.json` `hooks` | `hooks/hooks.json` (`{"hooks": …}`) |
+| `.mcp.json` | `.mcp.json`; `${NAME}` filled from `env` and secrets as below |
+| secrets: each `env` variable | a `userConfig` entry keyed by the variable's name, `sensitive: true`, `required` as declared; `${NAME}` becomes the env value with `{{vault:…}}` replaced by `${user_config.NAME}` (so `Bearer ${user_config.NAME}`) |
+| non-secret setup questions | `userConfig` entries keyed by `id` (`answer_<id>` if it clashes with a secret): `string`/`text` → `string`; `number`, `boolean` as-is; `choice` → `options` (required when there's no default); `multi` → `string` with `multiple: true` |
+| plain `env` | inlined where `.mcp.json` uses it: `{{answer:<id>}}` → `${user_config.<id>}`, `{{folder}}` → `${CLAUDE_PROJECT_DIR}` |
+| `$CLAUDE_PROJECT_DIR/<path>`, `${CLAUDE_PROJECT_DIR}/<path>`, `"$CLAUDE_PROJECT_DIR"/<path>` in hooks and MCP servers | `${CLAUDE_PLUGIN_ROOT}/<path>` when the path came with the plugin; otherwise unchanged (it still means the project) |
+| other files (`tools/`, `.claude/hooks/`, `LICENSE`…) | copied as-is, modes kept |
+| `README.md` | a generated README (install, what's inside, secrets as `${NAME}`, what stayed behind), the template's own README at the end |
+
+**Not exported:** `agent.yaml`, `CLAUDE.md`; the data list and `seed/`; the own layer
+(`identity.md`, `LOCAL.md`, `mcp.local.json`, `.agent8/`, `.claude/settings.local.json`); token
+file templates (`secrets[].files[].template`); links; the skills mirrored for another tool;
+`.codex/`; Claude Code settings other than hooks (permissions, `env`, `statusLine`…, which
+plugins can't set); and any template file that would land on a path that means something at a
+plugin's root (`skills/`, `agents/`, `commands/`, `hooks/hooks.json`, `settings.json`,
+`.claude-plugin/`, `monitors/`, `themes/`…). Secret file targets, `repos` and `requires` are
+listed in the README for the person to provide.
+
+**Never secrets.** The export refuses a template holding a file that looks like a key file,
+and scans every byte it writes with the format's secret checks (§8): any hit refuses the whole
+export, never a partial plugin.
 
 The plugin is read-only and updated as a whole, like a template version.
 

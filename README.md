@@ -11,7 +11,7 @@ Skills and Claude Code plugins.
 | [`schema/`](schema/) | JSON Schemas for `agent.yaml` and `.agent8/instance.yaml` |
 | [`examples/`](examples/) | `teo-memory-agent` (modelled on Teo's boilerplate), `invoice-chaser` (secrets, MCP), `installed-copy` |
 | [`tools/validate.py`](tools/validate.py) | validator: `python3 tools/validate.py template <dir>` or `instance <dir>` |
-| [`tools/agentfmt.py`](tools/agentfmt.py) | reference command line: `check`, `new`, `install`, `update` (below) |
+| [`tools/agentfmt.py`](tools/agentfmt.py) | reference command line: `check`, `new`, `install`, `update`, `plugin` (below) |
 | [`rfcs/`](rfcs/) | draft RFC for OpenGAP (not submitted) |
 
 Tests: `python3 -m unittest discover -s tools` (needs PyYAML, jsonschema and git).
@@ -33,6 +33,10 @@ agentfmt install https://github.com/sam/my-agent sams-agent --answer owner_name=
                                             # the copy's own layer beside it, data seeded once
 agentfmt update sams-agent --dry-run        # what switching to the latest version would change
 agentfmt update sams-agent --to 1.1.0       # switch version, up or back; never a merge
+agentfmt plugin https://github.com/sam/my-agent --zip my-agent.zip
+                                            # the same template as a Claude Code plugin (with a
+                                            # one-plugin marketplace): /plugin marketplace add,
+                                            # then /plugin install; never its data or secrets
 ```
 
 Releases are git tags `vX.Y.Z` whose `agent.yaml` has the same `version`. `install` and `update`

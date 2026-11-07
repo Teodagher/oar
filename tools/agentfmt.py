@@ -10,6 +10,9 @@
   agentfmt update [DIR] [--to V] [--answer id=value]... [--dry-run] [--yes]
                                              switch an installed copy to another version
                                              (up or back); never a merge
+  agentfmt plugin SOURCE [OUT] [--version V] [--zip FILE]
+                                             export a template as a Claude Code plugin (with
+                                             a one-plugin marketplace), never its data or secrets
 
 SOURCE is a git URL (https://, ssh://, git@host:owner/repo, file://), `github:owner/repo`,
 or a local folder. Versions are git tags `vX.Y.Z` (or `X.Y.Z`); without one, the highest
@@ -39,6 +42,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import validate as v  # noqa: E402  (the format's rules live in one place)
+import claude_plugin  # noqa: E402  (SPEC §11, shared with agent8's server)
 
 TOOL = "agentfmt"           # placeholder name: rename here once the format has one
 TOOL_VERSION = "0.1.0"
@@ -1750,6 +1754,62 @@ def cmd_update(args) -> int:
     return 0
 
 
+def zip_bytes(out: dict, folder: str) -> bytes:
+    """The plugin as a zip, one folder at the top, the same bytes every time."""
+    import io
+    import zipfile
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        for rel in sorted(out):
+            data, mode = out[rel]
+            info = zipfile.ZipInfo(f"{folder}/{rel}", date_time=(1980, 1, 1, 0, 0, 0))
+            info.create_system = 3
+            info.external_attr = (0o100000 | mode) << 16
+            info.compress_type = zipfile.ZIP_DEFLATED
+            z.writestr(info, data)
+    return buf.getvalue()
+
+
+def cmd_plugin(args) -> int:
+    with Source(args.source) as src:
+        files, version, _commit = src.files_at(args.version)
+    man = manifest_of(files)
+    format_check(man, "export this template")
+    rep = validate_files(files)
+    if rep.errors:
+        print_report(rep)
+        raise Refused(f"This template isn't valid ({len(rep.errors)} error(s)); {TOOL} won't export it.")
+    try:
+        files_out, info = claude_plugin.plugin_files(files, man)
+    except claude_plugin.ExportRefused as exc:
+        raise Refused(str(exc))
+    if args.zip:
+        data = zip_bytes(files_out, info["plugin"])
+        if os.path.lexists(args.zip):
+            raise Refused(f"{args.zip} already exists. Pick another name.")
+        with open(args.zip, "xb") as fh:
+            fh.write(data)
+        where = args.zip
+    else:
+        dest = os.path.abspath(args.out or info["plugin"])
+        if os.path.lexists(dest) and (not os.path.isdir(dest) or os.path.islink(dest) or os.listdir(dest)):
+            raise Refused(f"{dest} already has files in it. Pick another folder.")
+        for rel, (data, mode) in files_out.items():
+            p = os.path.join(dest, rel)
+            os.makedirs(os.path.dirname(p), exist_ok=True)
+            with open(p, "xb") as fh:
+                fh.write(data)
+            os.chmod(p, mode)
+        where = dest
+    out(f"Exported {man.get('name')} {version} as the Claude Code plugin {info['plugin']} in {where}.")
+    folder = info["plugin"] if args.zip else os.path.basename(where)
+    out(f"Install it in Claude Code: /plugin marketplace add ./{folder} "
+        f"then /plugin install {info['plugin']}@{info['marketplace']}")
+    plain_list("Claude Code will ask for these secrets", info["secrets"])
+    plain_list("Left out (see the plugin's README)", [f"{p}: {why}" for p, why in info["left_out"][:20]])
+    return 0
+
+
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(prog=TOOL, description="Reference tool for the open agent template "
                                 f"format (reads format {', '.join(f'{k}.x' for k in READS)}).")
@@ -1781,12 +1841,21 @@ def main(argv=None) -> int:
     u.add_argument("--dry-run", action="store_true", help="say what would change, change nothing")
     u.add_argument("--yes", action="store_true")
     u.add_argument("--now", help=argparse.SUPPRESS)
+    x = sub.add_parser("plugin", help="export a template as a Claude Code plugin")
+    x.add_argument("source")
+    x.add_argument("out", nargs="?", help="the folder to write (default: the plugin's name)")
+    x.add_argument("--version", dest="version", help="exact version (default: the latest release tag)")
+    x.add_argument("--zip", metavar="FILE", help="write a zip instead of a folder")
     args = p.parse_args(argv)
     try:
         if args.cmd == "check":
             return cmd_check(args)
         if args.cmd == "new":
             return cmd_new(args)
+        if args.cmd == "plugin":
+            if args.version and not SEMVER_RE.match(args.version):
+                raise Refused("--version must be an exact version, like 1.2.0.")
+            return cmd_plugin(args)
         if args.cmd == "install":
             if args.version and not SEMVER_RE.match(args.version):
                 raise Refused("--version must be an exact version, like 1.2.0.")
