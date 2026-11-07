@@ -120,6 +120,33 @@ agent8 adds, after the template and the own layer (SPEC §6):
 - A file edited by hand under `.agent8/template/` is reported in the Files tab ("from
   template, read-only") and lost at the next switch.
 
+How agent8 does it (helper 1.58, T-144):
+- The person starts a switch on the board (`template_update_begin`): an update only goes to a
+  higher version number (semver; a version published later with a lower number is never an
+  update), a rollback only to the version the agent ran just before. The version must be of the
+  same template and one the person may use (their workspace, the live share link the agent came
+  from, or a version the agent already ran).
+- The server reads the switch from the board (`template_download_info`: the agent, its old version
+  and the old manifest), downloads the new version with the install's checks, and, as the agent's
+  account, shows everything that would change: every template file with its whole diff (hidden
+  characters shown as `⟨U+…⟩`, nothing masked, long diffs paged in full on request), what happens
+  in the folder (files replaced or removed, host files rebuilt, skills, missing seeds, new
+  repositories, `extends`), hand edits of the read-only copy and of the host files, and any path
+  that would land on the copy's own files (the switch is refused). A fingerprint of all of it is
+  sent back with **Trust and update**; anything different at that moment refuses the switch.
+- The "before" side is the board's archive of the version the agent runs now, never the agent's own
+  copy (which is only compared, as a hand edit). Answers are kept only for questions that version
+  asks.
+- The old files are moved aside into `.agent8/previous/<when>_<from>_to_<to>/` (the last five
+  switches are kept). A journal there puts the folder back on any failure, and at the next look if
+  the process died halfway. The new version is written beside the old one; the two most recent versions
+  stay. The own layer and data are never written; MCP servers added to `.mcp.json` at run time are
+  kept in the rebuilt file. The recipe's plain `env` follows the new version unless its owner
+  changed the command. The agent restarts at its next idle moment.
+- Auto-update is off by default per agent. When its owner turns it on, the server asks the board
+  every 30 minutes; a version with a new required question or a new vault name, hand edits or a
+  colliding path waits for a person.
+
 ## 8. Making a template
 
 Not part of the format (it produces a template): on a copy, never on the live agent; anything
