@@ -110,6 +110,22 @@ unsure left out; the author reviews every file; personal details become setup qu
 secrets found become declared vault items; folder names count as content. The data list of the
 new template is generated from what was left out, with anchored patterns.
 
+How agent8 does it (helper 1.55, T-142):
+- Every file is read and copied as the agent's own Linux account, into a draft in that account's
+  `~/.cache/agent8/template-drafts/`; the agent's folder is never written. A folder that is the
+  account's home, the whole server or an installed copy can't be a template; a codebase gets
+  nothing ticked ("pick by hand").
+- `.mcp.json` and `.claude/settings.json` are regenerated, failing closed: agent8's own entries
+  out, every env and header value turned into `${NAME}`, anything that might be a key (a known
+  shape, a long value given to a secret-sounding name, a random-looking word) left out.
+  `CLAUDE.md` is the import line; `AGENTS.md` is built from the agent's instructions.
+- An optional pass lets Claude, as the agent's account and with edits allowed only in the draft,
+  turn personal details into setup questions; the author sees the diff.
+- At publishing, every byte kept is scanned again; a key blocks. The archive is a gzip'd tar
+  (deterministic: sorted, times and owners zeroed) of `agent.yaml` plus the kept files at their
+  template paths, cut into parts of 40 MB; parts go up with the server's own sign-in through the
+  `templates` edge function.
+
 ## 9. Launch
 
 How an agent is started (the command, `claude` or `codex`, flags, tmux session) stays in the
