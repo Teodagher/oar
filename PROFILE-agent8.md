@@ -47,6 +47,23 @@ autonomy first, one account per agent (all 2026-11-06).
    - the host-owned files (§5 below).
 4. The board records `user_agents.template_version_id`.
 
+How agent8 does it (helper 1.56, T-143):
+- Nothing from the template runs, and nothing is installed from a package manager, before the
+  owner presses **Trust and start**. Plugins are listed, never installed.
+- The server reads the version from the board (`template_download_info`, its own sign-in only),
+  refuses a format major it doesn't read before writing anything, downloads the parts through
+  the signed links and checks each part's sha256 and the archive's against the board.
+- The archive is unpacked in memory: no `..`, no absolute path, no link that leaves the template,
+  no link under a link, no hard link, device or `.git`. Files are written as the agent's account
+  into a new, empty folder, every folder opened without following a link, every file created new.
+- Other repositories are cloned first (git only: no submodules, no local or `ext::` transports,
+  https or ssh addresses without credentials). A required one that fails stops the install and
+  the folder is emptied again.
+- The agent starts with the app's recipe (the first harness the template names, bypass by
+  default), the template's plain `env` in front of the command. Then `template_install_bind`
+  records the version, writes the declared names and the scope into the agent's vault settings
+  and binds the declared `env` names to vault items that exist.
+
 ## 4. Trust (autonomy first)
 
 - Imports are **trust-based**, like installing an app: no forced "ask first" mode, no extras
