@@ -1,4 +1,4 @@
-# agent8 host profile for the agent template format v0.2
+# agent8 host profile for OAR (Open Agent Recipe) v0.2
 
 The [format](SPEC.md) says what a template and a copy *are*. This profile says what **agent8**
 does with them: hosting, launch, trust, the vault and the files it composes. Another host can

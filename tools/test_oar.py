@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for agentfmt.py, the reference CLI. Run: python3 -m unittest discover -s spec/agent-format/tools
+"""Tests for oar.py (OAR's reference CLI; agentfmt.py is its old name, an alias). Run: python3 -m unittest discover -s spec/agent-format/tools
 
 Needs git, PyYAML and jsonschema. The agreement test with agent8's installer runs only when
 the agent8 repository is next to the spec (it is skipped in the spec's own repository).
@@ -20,7 +20,7 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import agentfmt as af  # noqa: E402
+import oar as af  # noqa: E402
 import validate as v  # noqa: E402
 
 SPEC = Path(__file__).resolve().parent.parent
@@ -664,6 +664,20 @@ class TestAgreesWithAgent8(unittest.TestCase):
                 for r in (rec_a, rec_b):
                     r["template"].pop("source")
                 self.assertEqual(rec_a, rec_b)
+
+
+class TestOldName(unittest.TestCase):
+    """`agentfmt` was the tool's name before the format was named OAR; it still works."""
+
+    def test_import_is_the_same_module(self):
+        import agentfmt
+        self.assertIs(agentfmt, af)
+        self.assertEqual(af.TOOL, "oar")
+
+    def test_command_line(self):
+        r = subprocess.run([sys.executable, str(SPEC / "tools" / "agentfmt.py"), "check", "--all-files",
+                            str(EXAMPLES / "invoice-chaser")], capture_output=True, text=True, timeout=120)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
 
 if __name__ == "__main__":

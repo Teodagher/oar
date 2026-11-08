@@ -6,7 +6,7 @@ This is the reference reading. agent8 does the same in its `templates` function
 repositories and wants the same result: change one, change the other.
 
 Pure: no network, no disk. `files` is {path: {"kind": "file", "data": bytes, "mode": int} |
-{"kind": "link", "target": str} | {"kind": "dir"}}, already checked for unsafe paths (agentfmt's
+{"kind": "link", "target": str} | {"kind": "dir"}}, already checked for unsafe paths (oar's
 check_entries). `parse_yaml` reads YAML text (it may raise). An OpenGAP `extends` is followed by
 the caller, which passes the parents it fetched (direct parent first).
 """

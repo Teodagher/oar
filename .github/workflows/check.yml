@@ -1,0 +1,27 @@
+# CI of OAR's own public repo (inert inside agent8, whose tests.yml runs the
+# same checks in its `spec` job). It becomes live once this folder is the
+# root of the public spec repository.
+name: check
+on:
+  push:
+  pull_request:
+jobs:
+  oar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: pip install pyyaml jsonschema
+      - run: python3 -m unittest discover -s tools
+      - name: oar check on the example templates
+        run: |
+          for t in teo-memory-agent invoice-chaser; do
+            python3 tools/oar.py check --all-files "examples/$t"
+          done
+          python3 tools/oar.py check examples/installed-copy

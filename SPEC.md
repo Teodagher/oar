@@ -1,12 +1,14 @@
-# Open agent template format — v0.2 (draft)
+# OAR — Open Agent Recipe — v0.2 (draft)
 
-*Working title. No name has been chosen for the format yet; the decisions say "its name can
-wait". The extension block is called `x-agent8` because agent8 is the first host; nothing else
-in the format depends on agent8.*
+*OAR (Open Agent Recipe) is the format's public name (Teo, 2026-11-08). A template is an
+agent's recipe; a copy is an agent made from it. The extension block is still called
+`x-agent8`, because agent8 is the first host and agent8's helper and server already read it;
+nothing else in the format depends on agent8. Earlier drafts called the format "the open agent
+template format" and its tool `agentfmt`; both names mean OAR.*
 
 Status: **draft v0.2**, 2026-11-06, revised once after a review against six of Teo's real
 agents (ticket T-146). Replaces the copy-and-merge draft v0.1 ("Forkable",
-`raw/portable-agents/2026-11-06-agent-protocol-spec-v0.1-draft.md`). The key words MUST, SHOULD and MAY are used as in RFC 2119.
+kept in agent8's repository under `raw/portable-agents/`). The key words MUST, SHOULD and MAY are used as in RFC 2119.
 
 ## 0. In one paragraph
 
@@ -531,7 +533,7 @@ for people who want its capabilities in an agent they already have. The export i
 holding the plugin and a one-plugin marketplace beside it (`.claude-plugin/plugin.json` and
 `.claude-plugin/marketplace.json`, the entry's `source` being `"./"`), so it installs with
 `/plugin marketplace add ./<folder>` then `/plugin install <name>@agent8-<name>`.
-[`tools/agentfmt.py plugin`](tools/agentfmt.py) is the reference (`tools/claude_plugin.py`).
+[`oar plugin`](tools/oar.py) is the reference (`tools/claude_plugin.py`).
 
 | Template | Plugin |
 |---|---|
@@ -567,7 +569,7 @@ The plugin is read-only and updated as a whole, like a template version.
 ## 12. Reading OpenGAP repos without the block
 
 A host SHOULD import an OpenGAP repo that has no `x-agent8` block, as an unverified template.
-The reference reading is `tools/importer.py` (`agentfmt import` and `agentfmt install` use it);
+The reference reading is `tools/importer.py` (`oar import` and `oar install` use it);
 agent8 reads the same way, and a test holds the two to the same result.
 
 - **`extends`:** the parent is fetched and flattened with OpenGAP's own rules (§15 of its
@@ -620,7 +622,9 @@ an answer. [`tools/validate.py`](tools/validate.py) checks both.
 
 ## 15. Open questions
 
-1. **Name.** The format has no name yet; the public repo needs one (Teo).
+1. **Name.** Settled: **OAR**, Open Agent Recipe (Teo, 2026-11-08). Still open: whether a later
+   minor version also accepts the block as `x-oar` (hosts would read both; `x-agent8` stays
+   valid), and the public repo's address (Teo approves publishing).
 2. **Sidecar file.** Until OpenGAP accepts `x-` keys, should the block also be allowed in a
    separate `agent.x-agent8.yaml`, so strict `opengap validate` passes?
 3. **`SOUL.md`.** OpenGAP requires it. Ship a one-line `SOUL.md` pointing at `AGENTS.md`, or

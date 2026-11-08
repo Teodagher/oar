@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validator for the open agent template format v0.2 (see ../SPEC.md).
+"""Validator for OAR, the Open Agent Recipe format, v0.2 (see ../SPEC.md).
 
 Usage:
   validate.py template <dir>     check a template folder (a repo, before publishing)

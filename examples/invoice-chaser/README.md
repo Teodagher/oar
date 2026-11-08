@@ -1,7 +1,7 @@
 # invoice-chaser (example template)
 
 Follows up on unpaid invoices by email. A second worked example of the
-[agent template format v0.2](../../SPEC.md), showing what the first one doesn't:
+[OAR format v0.2](../../SPEC.md) (Open Agent Recipe), showing what the first one doesn't:
 
 - a secret given to the agent as an environment variable (`Stripe` → `STRIPE_SECRET_KEY`), used by
   an MCP server through `${STRIPE_SECRET_KEY}` in `.mcp.json`;

@@ -1,7 +1,8 @@
-# Open agent template format (v0.2 draft)
+# OAR — Open Agent Recipe (v0.2 draft)
 
-A shared agent is a **read-only template** plus the copy's **own layer**; updating means
-switching template versions, never merging. Built on OpenGAP `agent.yaml`, AGENTS.md, Agent
+**OAR** is an open format for sharing AI agents. A shared agent (the recipe, or *template*) is
+a **read-only template** plus the copy's **own layer**; updating means switching template
+versions, never merging. Built on OpenGAP `agent.yaml`, AGENTS.md, Agent
 Skills and Claude Code plugins.
 
 | File | What it is |
@@ -11,7 +12,7 @@ Skills and Claude Code plugins.
 | [`schema/`](schema/) | JSON Schemas for `agent.yaml` and `.agent8/instance.yaml` |
 | [`examples/`](examples/) | `teo-memory-agent` (modelled on Teo's boilerplate), `invoice-chaser` (secrets, MCP), `installed-copy` |
 | [`tools/validate.py`](tools/validate.py) | validator: `python3 tools/validate.py template <dir>` or `instance <dir>` |
-| [`tools/agentfmt.py`](tools/agentfmt.py) | reference command line: `check`, `new`, `install`, `import`, `update`, `plugin` (below) |
+| [`tools/oar.py`](tools/oar.py) | reference command line `oar`: `check`, `new`, `install`, `import`, `update`, `plugin` (below) |
 | [`tools/importer.py`](tools/importer.py) | reference reading of OpenGAP repos without the block and plain AGENTS.md repos (SPEC §12) |
 | [`rfcs/`](rfcs/) | draft RFC for OpenGAP (not submitted) |
 
@@ -20,27 +21,27 @@ next to agent8's code, `test_importer.py` also checks agent8 reads OpenGAP repos
 
 ## The reference command line
 
-`tools/agentfmt.py` makes the format usable without any host. It needs Python 3.9+, git,
-PyYAML and jsonschema, and nothing else. `agentfmt` is a placeholder name until the format has
-one (one constant, `TOOL`, at the top of the file).
+`tools/oar.py` (the `oar` command) makes the format usable without any host. It needs Python
+3.9+, git, PyYAML and jsonschema, and nothing else. It was called `agentfmt` before the format
+was named; `tools/agentfmt.py` is kept as an alias, so old scripts keep working.
 
 ```sh
-agentfmt new my-agent --author "Sam"        # a new template that already passes check
-agentfmt check my-agent                     # what git would commit: required fields, declared
+oar new my-agent --author "Sam"             # a new template that already passes check
+oar check my-agent                          # what git would commit: required fields, declared
                                             # paths exist, no data, no secret files or values,
                                             # undeclared executables listed
-agentfmt install https://github.com/sam/my-agent sams-agent --answer owner_name=Sam
+oar install https://github.com/sam/my-agent sams-agent --answer owner_name=Sam
                                             # the latest release tag (or --version 1.2.0):
                                             # template read-only under .agent8/template/<version>/,
                                             # the copy's own layer beside it, data seeded once
-agentfmt update sams-agent --dry-run        # what switching to the latest version would change
-agentfmt update sams-agent --to 1.1.0       # switch version, up or back; never a merge
-agentfmt import https://github.com/sam/opengap-agent my-template
+oar update sams-agent --dry-run             # what switching to the latest version would change
+oar update sams-agent --to 1.1.0            # switch version, up or back; never a merge
+oar import https://github.com/sam/opengap-agent my-template
                                             # an OpenGAP repo without the x-agent8 block (or a
                                             # plain AGENTS.md repo) written out as a template
                                             # (SPEC §12), with what wasn't carried over; install
                                             # reads such repos the same way
-agentfmt plugin https://github.com/sam/my-agent --zip my-agent.zip
+oar plugin https://github.com/sam/my-agent --zip my-agent.zip
                                             # the same template as a Claude Code plugin (with a
                                             # one-plugin marketplace): /plugin marketplace add,
                                             # then /plugin install; never its data or secrets
@@ -58,8 +59,9 @@ refused, 2 usage, 3 format too new.
 In a template's own CI:
 
 ```yaml
-- run: pip install pyyaml jsonschema && python3 path/to/agentfmt.py check .
+- run: pip install pyyaml jsonschema && python3 path/to/oar.py check .
 ```
 
-Ticket T-146 in the agent8 backlog tracks this draft. It moves to its own public repo (MIT)
-once it has a name.
+OAR is MIT-licensed ([`LICENSE`](LICENSE)). Its first host is [agent8](https://www.agent8.sh),
+where this draft is tracked (ticket T-146); the extension block is named `x-agent8` for that
+reason, and nothing else in the format depends on agent8.

@@ -22,7 +22,7 @@ import yaml
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-import agentfmt  # noqa: E402
+import oar  # noqa: E402
 import importer  # noqa: E402
 import validate as v  # noqa: E402
 
@@ -152,8 +152,8 @@ def src(repo="child", ref=None, owner="o"):
 
 
 def py_convert(d: Path, s: dict, parents=(), stop=None) -> dict:
-    files = agentfmt.check_entries(agentfmt.read_folder(str(d)))
-    pars = [{"url": u, "commit": c, "files": agentfmt.check_entries(agentfmt.read_folder(str(pd)))} for u, c, pd in parents]
+    files = oar.check_entries(oar.read_folder(str(d)))
+    pars = [{"url": u, "commit": c, "files": oar.check_entries(oar.read_folder(str(pd)))} for u, c, pd in parents]
     try:
         c = importer.convert(files, s, parse_yaml, pars, stop)
     except importer.Refused as exc:
@@ -184,13 +184,13 @@ class Reading(unittest.TestCase):
 
     def conv(self, files, **kw):
         d = write(self.tmp / "r", files)
-        return importer.convert(agentfmt.check_entries(agentfmt.read_folder(str(d))), src(**kw), parse_yaml)
+        return importer.convert(oar.check_entries(oar.read_folder(str(d))), src(**kw), parse_yaml)
 
     def test_full_opengap_with_its_parent(self):
         d = write(self.tmp / "c", FULL)
         b = write(self.tmp / "b", BASE)
-        files = agentfmt.check_entries(agentfmt.read_folder(str(d)))
-        pf = agentfmt.check_entries(agentfmt.read_folder(str(b)))
+        files = oar.check_entries(oar.read_folder(str(d)))
+        pf = oar.check_entries(oar.read_folder(str(b)))
         c = importer.convert(files, src(), parse_yaml, [{"url": "https://github.com/o/base", "commit": "b" * 40, "files": pf}])
         agents = c["files"]["AGENTS.md"]["data"].decode()
         self.assertTrue(agents.startswith("## Soul\n\nBase soul.\n\n## Rules\n\nBase rule.\n\nChild rule.\n\n## Duties\n\n"
@@ -219,8 +219,8 @@ class Reading(unittest.TestCase):
         self.assertEqual(c["info"]["extends"], [{"url": "https://github.com/o/base", "commit": "b" * 40}])
         # The result is a valid template, and the installer takes it.
         out = self.tmp / "out"
-        agentfmt.materialise(c["files"] | {"agent.yaml": agentfmt.file_entry(
-            "\n".join(agentfmt.to_yaml(c["manifest"])) + "\n")}, str(out))
+        oar.materialise(c["files"] | {"agent.yaml": oar.file_entry(
+            "\n".join(oar.to_yaml(c["manifest"])) + "\n")}, str(out))
         rep = v.validate_template(out)
         self.assertEqual(rep.errors, [])
 

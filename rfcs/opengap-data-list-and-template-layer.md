@@ -11,7 +11,7 @@
 | Author | Teo Dagher (agent8) |
 | Targets spec | v0.1.x (all additions optional) |
 | Issue | to be opened |
-| Reference impl | agent template format v0.2 and its validator (MIT), link to be added once published |
+| Reference impl | OAR (Open Agent Recipe) v0.2, its validator and the `oar` command line (MIT), link to be added once published |
 
 ## 1. Motivation
 

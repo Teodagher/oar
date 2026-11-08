@@ -2,7 +2,7 @@
 
     plugin_files(files, manifest) -> (out, info)
 
-`files` is a template held in memory, as agentfmt reads it: path -> {"kind": "file", "data",
+`files` is a template held in memory, as oar reads it: path -> {"kind": "file", "data",
 "mode"} | {"kind": "link", "target"} | {"kind": "dir"}. `out` is the plugin: path ->
 (bytes, mode), with `.claude-plugin/plugin.json` and a one-plugin `marketplace.json` beside
 it, so the folder installs with `/plugin marketplace add ./<folder>` then `/plugin install`.

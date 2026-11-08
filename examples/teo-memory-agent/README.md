@@ -3,7 +3,7 @@
 A Claude Code agent with durable memory: it interviews its owner on first launch, then works
 session after session, keeping what it learns in `memory/` without bloating its context.
 
-This folder is the worked example of the [agent template format v0.2](../../SPEC.md): a copy of
+This folder is the worked example of the [OAR format v0.2](../../SPEC.md) (Open Agent Recipe): a copy of
 [`Teodagher/teo-agent-boilerplate`](https://github.com/Teodagher/teo-agent-boilerplate) at tag
 `v0.2.0` (commit `56fcd2b`), the real conversion done in ticket T-147. Only this README differs
 from the repo's own. What changed compared with the boilerplate before v0.2.0:
