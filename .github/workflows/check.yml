@@ -1,17 +1,24 @@
-# CI of OAR's own public repo (inert inside agent8, whose tests.yml runs the
-# same checks in its `spec` job). It becomes live once this folder is the
-# root of the public spec repository.
+# CI of OAR's own public repo, github.com/Teodagher/oar (inert inside agent8, whose tests.yml runs the
+# same checks in its `spec` job). This folder is published there as the
+# repository root (git subtree split --prefix=spec/agent-format).
 name: check
 on:
   push:
   pull_request:
 jobs:
   oar:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 10
     strategy:
+      fail-fast: false
       matrix:
-        python-version: ["3.9", "3.14"]
+        include:
+          # Python 3.9 (the oldest the tool supports) is no longer built for
+          # the newest Ubuntu runner, so it runs on 24.04.
+          - python-version: "3.9"
+            os: ubuntu-24.04
+          - python-version: "3.14"
+            os: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
