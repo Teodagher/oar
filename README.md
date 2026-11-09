@@ -1,5 +1,7 @@
 # OAR — Open Agent Recipe (v0.2 draft)
 
+Public repository: <https://github.com/Teodagher/oar>. Releases are tags (`v0.2.0` is this draft).
+
 **OAR** is an open format for sharing AI agents. A shared agent (the recipe, or *template*) is
 a **read-only template** plus the copy's **own layer**; updating means switching template
 versions, never merging. Built on OpenGAP `agent.yaml`, AGENTS.md, Agent
@@ -63,5 +65,5 @@ In a template's own CI:
 ```
 
 OAR is MIT-licensed ([`LICENSE`](LICENSE)). Its first host is [agent8](https://www.agent8.sh),
-where this draft is tracked (ticket T-146); the extension block is named `x-agent8` for that
+where this draft started; the extension block is named `x-agent8` for that
 reason, and nothing else in the format depends on agent8.

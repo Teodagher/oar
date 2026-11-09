@@ -7,8 +7,8 @@ nothing else in the format depends on agent8. Earlier drafts called the format "
 template format" and its tool `agentfmt`; both names mean OAR.*
 
 Status: **draft v0.2**, 2026-11-06, revised once after a review against six of Teo's real
-agents (ticket T-146). Replaces the copy-and-merge draft v0.1 ("Forkable",
-kept in agent8's repository under `raw/portable-agents/`). The key words MUST, SHOULD and MAY are used as in RFC 2119.
+agents. Replaces an earlier copy-and-merge draft v0.1 ("Forkable", never
+published). The key words MUST, SHOULD and MAY are used as in RFC 2119.
 
 ## 0. In one paragraph
 
@@ -220,7 +220,7 @@ repos:
 
 ```yaml
 env:
-  COLIN_CONFIG_DIR: "{{folder}}/.secrets"
+  TOOL_CONFIG_DIR: "{{folder}}/.secrets"
   REPORT_LANGUAGE: "{{answer:language}}"
   LOG_LEVEL: info
 ```

@@ -1,8 +1,8 @@
 # RFC: Extension keys, a data list, and pinned read-only parents for gitagent manifests
 
 > **Draft, not submitted.** Written for `open-gitagent/opengap` (`spec/rfcs/`), following the
-> shape of its `identity.md` RFC. Submission is ticket T-167 in the agent8 repo and waits for
-> Teo's go.
+> shape of its `identity.md` RFC. The format it comes from is OAR (Open Agent Recipe),
+> published at <https://github.com/Teodagher/oar>.
 
 | Field | Value |
 |---|---|

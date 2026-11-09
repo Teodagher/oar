@@ -4,7 +4,7 @@ The [format](SPEC.md) says what a template and a copy *are*. This profile says w
 does with them: hosting, launch, trust, the vault and the files it composes. Another host can
 implement the format with a different profile. Nothing here is needed to write a template.
 
-Decisions behind it (agent8 repo): template plus own layer, where templates live, the company
+Decisions behind it (recorded in agent8's own, private, repository): template plus own layer, where templates live, the company
 vault, vault items are objects, vault placeholders, helper capabilities and compatibility,
 autonomy first, one account per agent (all 2026-11-06).
 
